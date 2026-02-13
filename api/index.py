@@ -160,10 +160,34 @@ def fetch_from_yfinance(symbol):
         change_p = (change / prev_close * 100) if prev_close else 0
         
         # Radar/SMC Scores (Mocked from yfinance data)
-        # 1. Momentum proxy: 50d SMA vs 200d SMA
-        sma50 = info.get('fiftyDayAverage', 0)
-        sma200 = info.get('twoHundredDayAverage', 0)
+        # 1. Momentum proxy: 5d vs 50d SMA
+        sma5 = info.get('fiveDayAverage', price)
+        sma50 = info.get('fiftyDayAverage', price)
+        sma200 = info.get('twoHundredDayAverage', price)
         momentum = 70 if price > sma50 > sma200 else 50
+        
+        # 2. Extract detailed margins
+        gross_margin = info.get('grossMargins', 0)
+        net_margin = info.get('profitMargins', 0)
+        operating_margin = info.get('operatingMargins', 0)
+        
+        # Multiply by 100 for percentage display
+        if gross_margin: gross_margin *= 100
+        if net_margin: net_margin *= 100
+        if operating_margin: operating_margin *= 100
+
+        # Valuation
+        pe_ratio = info.get('trailingPE', info.get('forwardPE', 0))
+        peg_ratio = info.get('pegRatio', 0)
+        eps_growth = info.get('earningsGrowth', 0)
+        rev_growth = info.get('revenueGrowth', 0)
+
+        # Mock F-Score / Z-Score based on margins for fallback
+        f_score = 4
+        if net_margin > 0: f_score += 1
+        if operating_margin > gross_margin * 0.5: f_score += 1
+
+        z_score = (gross_margin / 20) if gross_margin else 1.5
         
         data = {
             "symbol": symbol,
@@ -204,6 +228,17 @@ def fetch_from_yfinance(symbol):
             ],
             "sector": info.get('sector', '-'),
             "industry": info.get('industry', '-'),
+            "exchange": info.get('exchange', 'TWSE' if '.TW' in ticker_symbol else '-'),
+            "fScore": f_score,
+            "zScore": z_score,
+            "grossMargin": gross_margin,
+            "netMargin": net_margin,
+            "operatingMargin": operating_margin,
+            "epsGrowth": eps_growth * 100 if eps_growth else 0,
+            "revGrowth": rev_growth * 100 if rev_growth else 0,
+            "peRatio": pe_ratio,
+            "pegRatio": peg_ratio,
+            "grahamNumber": info.get('grahamNumber', 0),
             "updatedAt": "yfinance fallback",
             "source": "yfinance"
         }
@@ -349,14 +384,11 @@ class handler(BaseHTTPRequestHandler):
 
     def _handle_stock_lookup(self, symbol):
         # Handle potential encoding issues from URL
-        try:
-            # If it's already a garbled string from incorrect decoding
-            if 'Å' in symbol or 'ç' in symbol:
-                symbol = symbol.encode('latin-1').decode('utf-8')
-        except: pass
-
         symbol = symbol.strip()
-        print(f"Stock Lookup: {symbol}")
+        # Clean TW suffix for tvscreener compatibility
+        original_symbol = symbol
+        symbol = re.sub(r'\.TW[O]?$', '', symbol, flags=re.IGNORECASE)
+        print(f"Stock Lookup: {original_symbol} -> Cleaned: {symbol}")
         
         # 1. Reverse Lookup if Chinese name
         is_chinese = bool(re.search(r'[\u4e00-\u9fff]', symbol))
