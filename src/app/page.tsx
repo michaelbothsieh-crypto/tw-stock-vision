@@ -72,13 +72,18 @@ export default function Home() {
             <div className="container mx-auto max-w-7xl px-4 md:px-8 py-8 space-y-8">
                 {/* Search Header */}
                 <div className="flex flex-col md:flex-row items-center justify-between gap-6 py-8">
-                    <div className="text-center md:text-left space-y-2">
-                        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl text-foreground/90">
-                            市場概況
+                    <div className="text-center md:text-left space-y-4">
+                        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl text-foreground/90">
+                            TwStockVision <span className="text-primary">智能股市視野</span>
                         </h1>
-                        <p className="text-muted-foreground text-lg max-w-[600px]">
-                            台灣股市即時洞察
-                        </p>
+                        <div className="text-muted-foreground text-lg max-w-[650px] leading-relaxed">
+                            <p className="mb-2">專為現代投資人打造的 <span className="font-semibold text-foreground">SMC 聰明錢</span> 技術分析儀表板。</p>
+                            <ul className="grid gap-2 text-base mt-4 border-l-2 border-primary/30 pl-4">
+                                <li>🤖 <b>AI 輔助解讀</b>：一秒看懂多空趨勢，不再被 K 線圖淹沒。</li>
+                                <li>⚡ <b>SMC 主力籌碼</b>：即時追蹤資金流向 (RVOL) 與機構佈局。</li>
+                                <li>🎯 <b>目標價運算</b>：整合分析師預期與技術位階，提供進出參考。</li>
+                            </ul>
+                        </div>
                     </div>
                     <div className="w-full md:w-auto">
                         <StockSearch onSearch={handleSearch} className="md:w-[400px] shadow-lg" />

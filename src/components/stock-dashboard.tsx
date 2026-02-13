@@ -75,17 +75,57 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                 }, 250)
             }
 
-            // Generate AI Comment
-            let comment = "穩健觀察中... ☕"
-            if (data.changePercent > 5) comment = "飛向宇宙，浩瀚無垠！🚀"
-            else if (data.changePercent < -5) comment = "這是在特價嗎？還是接刀？🔪"
-            else if (data.rsi > 75) comment = "RSI 過熱！少年股神請冷靜 🔥"
-            else if (data.rsi < 25) comment = "RSI 超賣！人棄我取... 嗎？💎"
-            else if (data.rvol > 2.5) comment = "量能爆棚！主力在搞事？📢"
-            else if (data.technicalRating > 0.5) comment = "技術面強勢，趨勢是你的朋友！📈"
-            else if (data.technicalRating < -0.5) comment = "技術面疲弱，保守為上。🛡️"
+            // Generate Dynamic AI Comment
+            const getComment = () => {
+                const randomChoice = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)]
 
-            setAiComment(comment)
+                if (data.changePercent > 5) return randomChoice([
+                    "飛向宇宙，浩瀚無垠！🚀",
+                    "這漲幅... 難道是有內線？🤫",
+                    "多軍集結，全面進攻！⚔️",
+                    "恭喜持有的股東，今晚加菜！🍗"
+                ])
+                if (data.changePercent < -5) return randomChoice([
+                    "這是在特價嗎？還是接刀？🔪",
+                    "別怕，這只是技術性調整... 吧？📉",
+                    "該停損還是抄底？這是一個問題。🤔",
+                    "空軍大獲全勝，多軍瑟瑟發抖。🥶"
+                ])
+                if (data.rsi > 75) return randomChoice([
+                    "RSI 過熱！少年股神請冷靜 🔥",
+                    "追高小心住套房，記得設停損！⚠️",
+                    "情緒過於亢奮，隨時可能回檔。🛑"
+                ])
+                if (data.rsi < 25) return randomChoice([
+                    "RSI 超賣！人棄我取... 嗎？💎",
+                    "恐慌殺盤，也許是鑽石買點？👀",
+                    "跌無可跌，反彈在即？📈"
+                ])
+                if (data.rvol > 2.5) return randomChoice([
+                    "量能爆棚！主力在搞事？📢",
+                    "有人在偷偷吃貨，還是在倒貨？🧐",
+                    "成交量異常，必有妖孽！👻"
+                ])
+                if (data.technicalRating > 0.5) return randomChoice([
+                    "技術面強勢，趨勢是你的朋友！📈",
+                    "均線多頭排列，順勢而為。🌊",
+                    "各項指標亮紅燈，衝啊！🚦"
+                ])
+                if (data.technicalRating < -0.5) return randomChoice([
+                    "技術面疲弱，保守為上。🛡️",
+                    "型態轉空，現金為王。💰",
+                    "不要與趨勢作對，該跑就跑。🏃"
+                ])
+
+                return randomChoice([
+                    "穩健觀察中... ☕",
+                    "盤整盤，喝杯咖啡再看吧。💤",
+                    "多空交戰，方向未明。⚖️",
+                    "耐心等待出手的時機。🕰️"
+                ])
+            }
+
+            setAiComment(getComment())
         }
     }, [data])
 
