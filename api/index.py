@@ -456,7 +456,8 @@ class handler(BaseHTTPRequestHandler):
             else:
                 ss.set_markets(tvs.Market.TAIWAN)
             
-            # USE SEARCH for specific symbol (Much faster than full get)
+            # Robust Search
+            print(f"Searching for: {symbol}")
             ss.search(symbol)
             
             # Select necessary fields for SMC & Health
@@ -483,33 +484,31 @@ class handler(BaseHTTPRequestHandler):
             
             result_row = None
             if not df.empty:
-                # Find best match from results
+                print(f"Found {len(df)} rows in tvscreener")
+                # Try exact match first
                 for _, row in df.iterrows():
-                    row_dict = row.to_dict()
-                    row_sym = str(row_dict.get('Symbol', '')).upper()
-                    row_name = str(row_dict.get('Name', '')).upper()
-                    if symbol in row_sym or symbol in row_name:
-                        result_row = row_dict
+                    d = row.to_dict()
+                    sym = str(d.get('Symbol', d.get('Name', ''))).split(':')[-1]
+                    if sym.upper() == symbol.upper():
+                        result_row = d
                         break
                 
+                # If no exact match, take first one
                 if not result_row:
                     result_row = df.iloc[0].to_dict()
             
             if result_row:
                 data = result_row
-                ticker = symbol # default
-                # Extract clean ticker
                 raw_ticker = str(data.get('Symbol', data.get('Name', symbol)))
                 ticker = raw_ticker.split(':')[-1]
-                
                 raw_name = data.get('Description', data.get('Name', ''))
                 display_name = TW_STOCK_NAMES.get(ticker, raw_name)
                 
                 if not is_us_stock and ticker in TW_STOCK_NAMES:
                     display_name = TW_STOCK_NAMES[ticker]
             else:
-                # FALLBACK TO YFINANCE immediately if TV yields nothing
-                print(f"No match in tvscreener for {symbol}, trying yfinance...")
+                # FALLBACK TO YFINANCE
+                print(f"Tvscreener empty for {symbol}, trying yfinance fallback...")
                 yf_data = fetch_from_yfinance(symbol)
                 if yf_data:
                     if not is_us_stock and symbol in TW_STOCK_NAMES:
