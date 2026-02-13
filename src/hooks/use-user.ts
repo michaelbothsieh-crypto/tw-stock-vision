@@ -20,7 +20,7 @@ export function useUser() {
             // Generate a random ID if we don't have one (though typically we are registering a NEW user)
             const newId = crypto.randomUUID()
 
-            const res = await fetch('http://127.0.0.1:8000', {
+            const res = await fetch('/api/index', {
                 method: 'POST',
                 body: JSON.stringify({
                     action: 'register_user',

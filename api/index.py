@@ -48,48 +48,56 @@ db_pool = None
 db_alive = True
 db_fail_count = 0
 
+import threading
+
+db_lock = threading.Lock()
+
 def get_db_connection():
     global db_pool, db_alive, db_fail_count
     if not db_alive:
         return None
     
-    if not db_pool:
-        try:
-            from psycopg2 import pool
-            db_pool = pool.ThreadedConnectionPool(
-                1, 10,
-                os.environ['DATABASE_URL'],
-                sslmode='require',
-                connect_timeout=2
-            )
-            print("Database connection pool created.")
-            db_fail_count = 0
-        except Exception as e:
-            db_fail_count += 1
-            print(f"Error creating connection pool ({db_fail_count}): {e}")
-            if db_fail_count > 2:
-                print("Disabling DB attempts (Circuit Breaker).")
-                db_alive = False
+    with db_lock:
+        if not db_pool:
             try:
-                return psycopg2.connect(os.environ['DATABASE_URL'], connect_timeout=2)
-            except Exception as e2:
-                return None
+                from psycopg2 import pool
+                db_pool = pool.ThreadedConnectionPool(
+                    1, 20,
+                    os.environ['DATABASE_URL'],
+                    sslmode='require',
+                    connect_timeout=3
+                )
+                print("Database connection pool created.")
+                db_fail_count = 0
+            except Exception as e:
+                db_fail_count += 1
+                print(f"Error creating connection pool ({db_fail_count}): {e}")
+                if db_fail_count > 3:
+                    print("Disabling DB attempts (Circuit Breaker).")
+                    db_alive = False
+                try:
+                    return psycopg2.connect(os.environ['DATABASE_URL'], connect_timeout=3)
+                except:
+                    return None
     
     try:
         conn = db_pool.getconn()
-        db_fail_count = 0
         return conn
     except Exception as e:
-        db_fail_count += 1
-        if db_fail_count > 5:
-            db_alive = False
+        print(f"Pool delivery error: {e}")
         return None
 
 def return_db_connection(conn):
-    if db_pool and conn:
-        db_pool.putconn(conn)
-    elif conn:
-        conn.close()
+    if not conn: return
+    try:
+        if db_pool:
+            db_pool.putconn(conn)
+        else:
+            conn.close()
+    except Exception as e:
+        print(f"Connection cleanup error: {e}")
+        try: conn.close()
+        except: pass
 
 def init_db():
     try:
@@ -688,16 +696,29 @@ class handler(BaseHTTPRequestHandler):
         finally: return_db_connection(conn)
 
     def do_GET(self):
-        print(f"GET Request: {self.path}")
+        parsed_path = urlparse(self.path)
+        path = parsed_path.path
+        query = parse_qs(parsed_path.query)
+        
+        print(f"GET Request: {path} with params {list(query.keys())}")
+        
         try:
-            query = parse_qs(urlparse(self.path).query)
+            # Route handling (Support both direct / and proxied /api/ prefix)
             if 'leaderboard' in query:
                 self._handle_leaderboard()
             elif 'symbol' in query:
                 self._handle_stock_lookup(query['symbol'][0])
+            elif path.endswith('/health'):
+                self._set_headers()
+                self.wfile.write(json.dumps({"status": "ok", "db": db_alive}).encode('utf-8'))
             else:
                 self._set_headers()
-                self.wfile.write(json.dumps({"error": "Invalid endpoint"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"error": f"Invalid endpoint: {path}"}).encode('utf-8'))
         except Exception as e:
-            print(f"Global GET Error: {e}")
+            print(f"Global GET Error on {path}: {e}")
+            import traceback
+            traceback.print_exc()
+            try:
+                self.send_error(500, str(e))
+            except: pass
 

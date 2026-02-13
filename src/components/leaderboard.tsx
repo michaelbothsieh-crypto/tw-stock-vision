@@ -19,7 +19,7 @@ export function Leaderboard() {
         // In real dev, this URL needs to be dynamic or env based
         const fetchLeaderboard = async () => {
             try {
-                const res = await fetch('http://127.0.0.1:8000?leaderboard=true')
+                const res = await fetch('/api/leaderboard?leaderboard=true')
                 const data = await res.json()
                 if (Array.isArray(data)) {
                     setItems(data)

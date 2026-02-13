@@ -22,7 +22,7 @@ export default function Home() {
         setStockData(null)
 
         try {
-            const res = await fetch(`http://127.0.0.1:8000?symbol=${encodeURIComponent(query)}`)
+            const res = await fetch(`/api/stock?symbol=${encodeURIComponent(query)}`)
             if (!res.ok) throw new Error("API Error")
             const data = await res.json()
             if (data.error) throw new Error(data.error)
@@ -40,7 +40,7 @@ export default function Home() {
         const fetchInitial = async () => {
             setLoading(true)
             try {
-                const res = await fetch(`http://127.0.0.1:8000?symbol=2330`)
+                const res = await fetch(`/api/stock?symbol=2330`)
                 if (!res.ok) throw new Error("API Error")
                 const data = await res.json()
                 if (data.error) throw new Error(data.error)
