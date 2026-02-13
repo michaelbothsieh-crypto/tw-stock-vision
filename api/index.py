@@ -435,12 +435,15 @@ class handler(BaseHTTPRequestHandler):
             df = ss.get()
             result = None
             if not df.empty:
-                print(f"Columns: {df.columns.tolist()[:5]}...")
+                # tvscreener library often uses 'Symbol' for the ticker column
+                symbol_col = 'Symbol' if 'Symbol' in df.columns else 'Name'
+                
                 # Local exact match filter
-                mask = df['Name'] == symbol
+                mask = df[symbol_col] == symbol
                 if mask.any():
                     result = df[mask]
                 else:
+                    # Fallback for Chinese names or other matches in Description
                     mask = df['Description'].str.contains(symbol, case=False, na=False)
                     if mask.any():
                         result = df[mask]
@@ -459,7 +462,8 @@ class handler(BaseHTTPRequestHandler):
             
             # 4. Map & Analyze
             data = result.iloc[0].to_dict()
-            ticker = data.get('Name', symbol)
+            symbol_col = 'Symbol' if 'Symbol' in data else 'Name'
+            ticker = data.get(symbol_col, symbol)
             raw_name = data.get('Description', '')
             display_name = TW_STOCK_NAMES.get(ticker, raw_name) if not is_us_stock else raw_name
             
