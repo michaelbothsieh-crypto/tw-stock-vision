@@ -108,39 +108,58 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
-
-        content_length = int(self.headers['Content-Length'])
-        post_data = self.rfile.read(content_length)
-        data = json.loads(post_data.decode('utf-8'))
-        action = data.get('action')
-
-        conn = get_db_connection()
+        self.end_headers() # Send headers immediately
+        
         try:
-            cur = conn.cursor(cursor_factory=RealDictCursor)
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
             
-            if action == 'register':
+            action = data.get('action')
+            conn = get_db_connection()
+            cur = conn.cursor()
+
+            if action == 'register_user':
                 nickname = data.get('nickname')
-                # Check if exists
-                cur.execute("SELECT id, nickname FROM users WHERE nickname = %s", (nickname,))
-                user = cur.fetchone()
-                if not user:
-                    cur.execute("INSERT INTO users (nickname) VALUES (%s) RETURNING id, nickname", (nickname,))
-                    user = cur.fetchone()
+                user_id = data.get('id')
+                if not nickname or not user_id:
+                    self.wfile.write(json.dumps({"error": "Missing nickname or id"}).encode('utf-8'))
+                    return
+                
+                print(f"Registering user: {nickname} ({user_id})")
+                try:
+                    # Check if ID exists, if so update nickname, else insert
+                    cur.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+                    if cur.fetchone():
+                        cur.execute("UPDATE users SET nickname = %s, created_at = NOW() WHERE id = %s", (nickname, user_id))
+                    else:
+                        cur.execute("INSERT INTO users (id, nickname) VALUES (%s, %s)", (user_id, nickname))
                     conn.commit()
-                self.wfile.write(json.dumps(user, default=str).encode('utf-8'))
+                    self.wfile.write(json.dumps({"status": "success", "user": {"id": user_id, "nickname": nickname}}).encode('utf-8'))
+                except Exception as e:
+                    conn.rollback()
+                    print(f"DB Error during registration: {e}")
+                    self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
 
             elif action == 'add_portfolio':
                 user_id = data.get('user_id')
                 symbol = data.get('symbol')
                 price = data.get('price')
-                cur.execute("""
-                    INSERT INTO portfolio_items (user_id, symbol, entry_price) 
-                    VALUES (%s, %s, %s) 
-                    RETURNING id
-                """, (user_id, symbol, price))
-                conn.commit()
-                self.wfile.write(json.dumps({"status": "success"}, default=str).encode('utf-8'))
+                
+                print(f"Adding to portfolio: {user_id} - {symbol} @ {price}")
+                
+                try:
+                    cur.execute("""
+                        INSERT INTO portfolio_items (user_id, symbol, entry_price, entry_date)
+                        VALUES (%s, %s, %s, NOW())
+                        RETURNING id
+                    """, (user_id, symbol, price))
+                    conn.commit()
+                    self.wfile.write(json.dumps({"status": "success"}).encode('utf-8'))
+                except Exception as e:
+                    conn.rollback()
+                    print(f"DB Error adding portfolio: {e}")
+                    self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
             
             # Fetch user portfolio
             elif action == 'get_portfolio':
@@ -158,10 +177,13 @@ class handler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps(items, default=str).encode('utf-8'))
 
             cur.close()
-        except Exception as e:
-            self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
-        finally:
             return_db_connection(conn)
+
+        except Exception as e:
+            print(f"POST Error: {e}")
+            # If headers not sent, send 500. But we sent 200 already.
+            # So just return error JSON if possible
+            self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
 
     def do_GET(self):
         # ... logic for handling GET ...
@@ -415,7 +437,21 @@ class handler(BaseHTTPRequestHandler):
                         {"subject": "安全性 (Safety)", "A": safety_score, "fullMark": 100},
                         {"subject": "趨勢 (Trend)", "A": trend_score, "fullMark": 100},
                         {"subject": "關注 (Attention)", "A": attention_score, "fullMark": 100},
-                    ]
+                    ],
+                    # Fundamental Data
+                    "sector": data.get('Sector', 'N/A'),
+                    "industry": data.get('Industry', 'N/A'),
+                    "employees": data.get('Number of Employees', 0),
+                    "fScore": data.get('Piotroski F-Score (TTM)', 0),
+                    "zScore": data.get('Altman Z-Score (TTM)', 0),
+                    "grossMargin": data.get('Gross Margin (TTM)', 0),
+                    "netMargin": data.get('Net Margin (TTM)', 0),
+                    "operatingMargin": data.get('Operating Margin (TTM)', 0),
+                    "epsGrowth": data.get('EPS Diluted (TTM YoY Growth)', 0),
+                    "revGrowth": data.get('Revenue (TTM YoY Growth)', 0),
+                    "peRatio": data.get('Price to Earnings Ratio (TTM)', 0),
+                    "pegRatio": data.get('PEG Ratio (TTM)', 0),
+                    "grahamNumber": data.get("Graham's Number (TTM)", 0)
                 }
                 
                 # Sanitization
@@ -426,23 +462,24 @@ class handler(BaseHTTPRequestHandler):
                         response_data[k] = 0
 
                 # Update Cache
+                conn_cache = None # Use a separate connection variable for cache write
                 try:
-                    conn = get_db_connection()
-                    cur = conn.cursor()
+                    conn_cache = get_db_connection()
+                    cur = conn_cache.cursor()
                     cur.execute("""
                         INSERT INTO stock_cache (symbol, data, updated_at)
                         VALUES (%s, %s, NOW())
                         ON CONFLICT (symbol) 
                         DO UPDATE SET data = EXCLUDED.data, updated_at = NOW();
-                    """, (symbol, json.dumps(response_data)))
-                    conn.commit()
+                    """, (symbol, json.dumps(response_data, default=str))) # Added default=str
+                    conn_cache.commit()
                     cur.close()
-                    return_db_connection(conn)
+                    return_db_connection(conn_cache)
                 except Exception as e:
                     print(f"Cache Write Error: {e}")
-                    if conn: return_db_connection(conn)
+                    if conn_cache: return_db_connection(conn_cache)
 
-                self.wfile.write(json.dumps(response_data).encode('utf-8'))
+                self.wfile.write(json.dumps(response_data, default=str).encode('utf-8')) # Added default=str
             else:
                 self.wfile.write(json.dumps({"error": f"Symbol '{symbol}' not found"}).encode('utf-8'))
                 

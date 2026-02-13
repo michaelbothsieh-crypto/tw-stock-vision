@@ -10,6 +10,7 @@ import { Info, PlusCircle, Trophy } from "lucide-react"
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { toast } from "sonner"
 import { useUser } from "@/hooks/use-user"
+import { NicknameDialog } from "./nickname-dialog"
 
 interface StockData {
     symbol: string
@@ -74,19 +75,21 @@ const InfoTooltip = ({ content }: { content: string }) => (
 )
 
 export function StockDashboard({ data, loading, error }: StockDashboardProps) {
-    const { user } = useUser()
+    const { user, register } = useUser()
     const [adding, setAdding] = useState(false)
     const [aiCommentString, setAiCommentString] = useState<string>("")
+    const [showRegister, setShowRegister] = useState(false)
 
-    const handleAddToPortfolio = async () => {
-        if (!user || !data) return
+    // Helper to perform the actual API call
+    const performAddToPortfolio = async (userId: string) => {
+        if (!data) return
         setAdding(true)
         try {
             const res = await fetch('http://127.0.0.1:8000', {
                 method: 'POST',
                 body: JSON.stringify({
                     action: 'add_portfolio',
-                    user_id: user.id,
+                    user_id: userId,
                     symbol: data.symbol,
                     price: data.price
                 })
@@ -95,12 +98,35 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
             if (result.status === 'success') {
                 toast.success(`已將 ${data.symbol} 加入投資組合！`)
             } else {
-                toast.error("加入失敗")
+                toast.error("加入失敗: " + (result.error || "未知錯誤"))
             }
         } catch (e) {
             toast.error("連線錯誤")
         } finally {
             setAdding(false)
+        }
+    }
+
+    const handleAddToPortfolio = async () => {
+        if (!data) return
+
+        if (!user) {
+            setShowRegister(true)
+            return
+        }
+
+        performAddToPortfolio(user.id)
+    }
+
+    const handleRegister = async (nickname: string) => {
+        const newUser = await register(nickname)
+        if (newUser) {
+            setShowRegister(false)
+            toast.success(`歡迎, ${newUser.nickname}! 即將加入追蹤...`)
+            // Short delay to ensure state updates? Not needed usually, but safe.
+            performAddToPortfolio(newUser.id)
+        } else {
+            toast.error("註冊失敗")
         }
     }
 
@@ -179,6 +205,7 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
 
     return (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid gap-6">
+            <NicknameDialog open={showRegister} onRegister={handleRegister} />
 
             {/* 1. Header Card (Overview) */}
             <div className="rounded-3xl border border-border/50 bg-card/50 p-8 shadow-xl backdrop-blur-sm relative overflow-hidden group">

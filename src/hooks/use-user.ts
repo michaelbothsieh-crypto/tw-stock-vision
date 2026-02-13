@@ -17,22 +17,32 @@ export function useUser() {
 
     const register = async (nickname: string) => {
         try {
+            // Generate a random ID if we don't have one (though typically we are registering a NEW user)
+            const newId = crypto.randomUUID()
+
             const res = await fetch('http://127.0.0.1:8000', {
                 method: 'POST',
-                body: JSON.stringify({ action: 'register', nickname })
+                body: JSON.stringify({
+                    action: 'register_user',
+                    nickname,
+                    id: newId
+                })
             })
             const data = await res.json()
-            if (data.id) {
-                localStorage.setItem('tw_stock_user', JSON.stringify(data))
-                setUser(data)
-                toast.success(`歡迎回來, ${data.nickname}!`)
-                return true
+
+            if (data.status === 'success' && data.user) {
+                localStorage.setItem('tw_stock_user', JSON.stringify(data.user))
+                setUser(data.user)
+                toast.success(`歡迎回來, ${data.user.nickname}!`)
+                return data.user
+            } else if (data.error) {
+                throw new Error(data.error)
             }
         } catch (e) {
             console.error(e)
-            toast.error("註冊失敗，請稍後再試")
+            toast.error("註冊失敗: " + String(e))
         }
-        return false
+        return null
     }
 
     return { user, loading, register }

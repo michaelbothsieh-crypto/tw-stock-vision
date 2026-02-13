@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import { Search } from "lucide-react"
 import { StockDashboard } from "@/components/stock-dashboard"
 import { Leaderboard } from "@/components/leaderboard"
-import { NicknameDialog } from "@/components/nickname-dialog"
 import { useUser } from "@/hooks/use-user"
 
 export default function Home() {
@@ -37,8 +36,7 @@ export default function Home() {
 
     return (
         <main className="min-h-screen bg-black text-white selection:bg-primary selection:text-primary-foreground">
-            {/* Nickname Dialog */}
-            <NicknameDialog open={!user} onRegister={register} />
+
 
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"></div>
 
