@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import Typewriter from 'typewriter-effect';
 import { AI_RadarChart } from "./ui/radar-chart"
 import { Info, PlusCircle, Trophy } from "lucide-react"
-import * as Tooltip from '@radix-ui/react-tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "sonner"
 import { useUser } from "@/hooks/use-user"
 import { NicknameDialog } from "./nickname-dialog"
@@ -44,19 +44,16 @@ interface StockDashboardProps {
 
 // Helper for Tooltip
 const InfoTooltip = ({ content }: { content: string }) => (
-    <Tooltip.Provider>
-        <Tooltip.Root>
-            <Tooltip.Trigger asChild>
+    <TooltipProvider>
+        <Tooltip>
+            <TooltipTrigger asChild>
                 <Info className="h-4 w-4 text-muted-foreground/70 hover:text-foreground cursor-help" />
-            </Tooltip.Trigger>
-            <Tooltip.Portal>
-                <Tooltip.Content className="max-w-[200px] bg-popover text-popover-foreground text-xs p-2 rounded shadow-md border animate-in fade-in-0 zoom-in-95" sideOffset={5}>
-                    {content}
-                    <Tooltip.Arrow className="fill-popover" />
-                </Tooltip.Content>
-            </Tooltip.Portal>
-        </Tooltip.Root>
-    </Tooltip.Provider>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[200px]" sideOffset={5}>
+                {content}
+            </TooltipContent>
+        </Tooltip>
+    </TooltipProvider>
 )
 
 export function StockDashboard({ data, loading, error }: StockDashboardProps) {
