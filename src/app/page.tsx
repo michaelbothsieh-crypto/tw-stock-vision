@@ -115,9 +115,6 @@ export default function Home() {
                     </div>
                 </div>
 
-                <footer className="mt-20 text-center text-zinc-600 text-sm">
-                    Build with ❤️ by Gemini & Vercel
-                </footer>
             </div>
         </main>
     )

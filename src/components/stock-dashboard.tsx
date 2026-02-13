@@ -12,59 +12,29 @@ import { toast } from "sonner"
 import { useUser } from "@/hooks/use-user"
 import { NicknameDialog } from "./nickname-dialog"
 import { HealthCheck } from "./health-check"
-
-interface StockData {
-    symbol: string
-    name?: string
-    price: number
-    change: number
-    changePercent: number
-    volume: number
-    marketCap?: number
-    updatedAt?: string
-    // SMC Indicators
-    rvol: number
-    cmf: number
-    vwap: number
-    // Ratings
-    technicalRating: number
-    analystRating: number
-    targetPrice: number
-    // Daily Vitals
-    rsi: number
-    atr_p: number
-    sma20: number
-    sma50: number
-    sma200: number
-    perf_w: number
-    perf_m: number
-    perf_ytd: number
-    volatility: number
-    earningsDate: number
-    // AI Data
-    smcScore: number
-    prediction?: {
-        confidence: string
-        upper: number
-        lower: number
-        days: number
-    }
-    radarData?: any[]
-    // Fundamental Data
-    sector: string
-    industry: string
-    employees: number
-    fScore: number
-    zScore: number
-    grossMargin: number
-    netMargin: number
-    operatingMargin: number
-    epsGrowth: number
-    revGrowth: number
-    peRatio: number
-    pegRatio: number
-    grahamNumber: number
+import { RadarCard } from "./dashboard/radar-card"
+import { PredictionCard } from "./dashboard/prediction-card"
+import { TechnicalEvidence } from "./dashboard/technical-evidence"
+import { StockData } from "./dashboard/types"
+const SECTOR_TRANSLATIONS: Record<string, string> = {
+    "Electronic Technology": "電子科技",
+    "Semiconductors": "半導體",
+    "Finance": "金融服務",
+    "Health Technology": "健康醫療",
+    "Technology Services": "科技服務",
+    "Consumer Durables": "耐用消費品",
+    "Consumer Non-Durables": "非耐用消費品",
+    "Producer Manufacturing": "生產製造",
+    "Energy Minerals": "能源礦產",
+    "Process Industries": "加工工業",
+    "Communications": "通訊通訊",
+    "Utilities": "公用事業",
+    "Distribution Services": "流通服務",
+    "Retail Trade": "零售貿易",
+    "Commercial Services": "商業服務",
+    "Transportation": "運輸物流"
 }
+
 
 interface StockDashboardProps {
     data: StockData | null
@@ -129,6 +99,8 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
             setShowRegister(true)
             return
         }
+
+        if (adding) return // Prevent double clicks while adding
 
         performAddToPortfolio(user.id)
     }
@@ -236,12 +208,12 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                             </span>
                             {data.sector !== 'N/A' && (
                                 <span className="rounded-full border border-zinc-700 px-2.5 py-0.5 text-xs text-zinc-400">
-                                    {data.sector}
+                                    {SECTOR_TRANSLATIONS[data.sector] || data.sector}
                                 </span>
                             )}
                             {data.industry !== 'N/A' && (
                                 <span className="rounded-full border border-zinc-700 px-2.5 py-0.5 text-xs text-zinc-400">
-                                    {data.industry}
+                                    {SECTOR_TRANSLATIONS[data.industry] || data.industry}
                                 </span>
                             )}
                         </div>
@@ -250,10 +222,10 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                         {/* Add to Portfolio Button */}
                         <button
                             onClick={handleAddToPortfolio}
-                            disabled={adding || !user}
+                            disabled={adding}
                             className="mt-4 flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            <PlusCircle className="h-4 w-4" />
+                            {adding ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" /> : <PlusCircle className="h-4 w-4" />}
                             {adding ? "加入中..." : "加入追蹤"}
                         </button>
                         {/* Loop Typewriter */}
@@ -287,17 +259,14 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                     </div>
                 </div>
 
-                <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-5">
-                    <Stat label="成交量" value={(data.volume || 0).toLocaleString()} />
-                    <Stat label="市值" value={data.marketCap ? formatMarketCap(data.marketCap) : "--"} />
-                    <Stat label="RVOL (量能)" value={(data.rvol || 0).toFixed(2) + "x"}
-                        subtext={(data.rvol || 0) > 1.5 ? "🔥 滾燙" : "冰冷"}
-                        color={(data.rvol || 0) > 1.5 ? "text-amber-400" : undefined} />
-                    <Stat label="VWAP" value={(data.vwap || 0).toFixed(2)}
-                        color={data.price > (data.vwap || 0) ? "text-emerald-400" : "text-rose-400"} />
-                    <Stat label="CMF (金流)" value={(data.cmf || 0).toFixed(2)}
-                        color={(data.cmf || 0) > 0 ? "text-emerald-400" : "text-rose-400"} />
-                </div>
+                <TechnicalEvidence
+                    volume={data.volume}
+                    marketCap={data.marketCap}
+                    rvol={data.rvol}
+                    vwap={data.vwap}
+                    cmf={data.cmf}
+                    price={data.price}
+                />
             </div>
 
             {/* 3. Fundamental Health Check */}
@@ -305,52 +274,12 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
 
             {/* 4. AI Analysis Grid */}
             <div className="grid gap-6 md:grid-cols-2">
-
                 {/* AI Radar Chart */}
-                <div className="rounded-3xl border border-border/50 bg-card/30 p-6 shadow-lg backdrop-blur-sm relative overflow-hidden">
-                    <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
-                        <span className="text-2xl">🧬</span> AI 戰力分析 (Radar)
-                    </h3>
-                    <div className="h-[300px]">
-                        {data.radarData && <AI_RadarChart data={data.radarData} />}
-                    </div>
-                </div>
+                <RadarCard data={data.radarData || []} />
 
                 {/* Prediction Cone & Ratings */}
                 <div className="flex flex-col gap-6">
-                    {/* Prediction Cone */}
-                    <div className="rounded-3xl border border-border/50 bg-gradient-to-br from-blue-900/20 to-cyan-900/20 p-6 shadow-lg backdrop-blur-sm">
-                        <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                            <span className="text-2xl">🔮</span> AI 未來視 (Prediction)
-                        </h3>
-                        {data.prediction ? (
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center bg-background/20 p-3 rounded-xl border border-white/5">
-                                    <span className="text-sm text-muted-foreground">預測信心指數</span>
-                                    <span className="font-bold text-cyan-400">{data.prediction.confidence}</span>
-                                </div>
-                                <div className="grid grid-cols-3 gap-2 text-center">
-                                    <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20">
-                                        <div className="text-xs text-emerald-400">樂觀 (Bullish)</div>
-                                        <div className="font-mono font-bold">{data.prediction.upper.toFixed(2)}</div>
-                                    </div>
-                                    <div className="p-2 pt-4">
-                                        <div className="text-xs text-muted-foreground">當前</div>
-                                        <div className="font-mono font-bold text-lg">{data.price.toFixed(2)}</div>
-                                    </div>
-                                    <div className="p-2 rounded bg-rose-500/10 border border-rose-500/20">
-                                        <div className="text-xs text-rose-400">悲觀 (Bearish)</div>
-                                        <div className="font-mono font-bold">{data.prediction.lower.toFixed(2)}</div>
-                                    </div>
-                                </div>
-                                <p className="text-[10px] text-center text-muted-foreground opacity-70">
-                                    *基於 ATR 波動率推算未來 {data.prediction.days} 日潛在區間 (68% 機率)
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="text-center text-muted-foreground py-8">數據不足無法預測</div>
-                        )}
-                    </div>
+                    <PredictionCard price={data.price} prediction={data.prediction} />
 
                     {/* Ratings */}
                     <div className="flex-1 rounded-3xl border border-border/50 bg-card/30 p-6 shadow-lg backdrop-blur-sm">
@@ -381,17 +310,6 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
     )
 }
 
-function Stat({ label, value, subtext, color }: { label: string; value: string | number, subtext?: string, color?: string }) {
-    return (
-        <div className="flex flex-col gap-1 p-4 rounded-2xl bg-background/40 border border-border/30 backdrop-blur-md hover:bg-background/50 transition-colors group relative overflow-hidden">
-            {/* Scanner Effect Small */}
-            <div className="absolute top-0 left-0 w-full h-[1px] bg-white/20 animate-scan opacity-0 group-hover:opacity-100"></div>
-            <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{label}</span>
-            <span className={cn("text-2xl font-bold font-mono tracking-tight", color || "text-foreground")}>{value}</span>
-            {subtext && <span className="text-[10px] text-muted-foreground/80">{subtext}</span>}
-        </div>
-    )
-}
 
 function VitalRow({ label, value, status }: { label: string, value: string, status: "good" | "bad" | "warning" | "neutral" }) {
     const colors = {
@@ -450,9 +368,3 @@ function getRsiStatus(val: number): "good" | "bad" | "warning" | "neutral" {
     return "neutral"
 }
 
-function formatMarketCap(value: number): string {
-    if (value >= 1e12) return (value / 1e12).toFixed(2) + "兆"
-    if (value >= 1e9) return (value / 1e9).toFixed(2) + "0億" // 1B = 10億
-    if (value >= 1e6) return (value / 1e6).toFixed(2) + "百萬"
-    return value.toLocaleString()
-}

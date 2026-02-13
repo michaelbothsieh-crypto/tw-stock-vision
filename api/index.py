@@ -7,6 +7,8 @@ from tvscreener import StockScreener, StockField
 import re
 import os
 import time
+import yfinance as yf
+from datetime import datetime, timedelta
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
@@ -35,26 +37,46 @@ TW_STOCK_NAMES = {
     "1513": "中興電", "1519": "華城", "1605": "華新", "1907": "永豐餘",
 }
 
-# Database Utilities
-try:
-    from psycopg2 import pool
-    # Initialize connection pool (minconn=1, maxconn=10)
-    db_pool = pool.ThreadedConnectionPool(
-        1, 10,
-        os.environ['DATABASE_URL'],
-        sslmode='require'
-    )
-    print("Database connection pool created.")
-except Exception as e:
-    print(f"Error creating connection pool: {e}")
-    db_pool = None
+db_pool = None
+db_alive = True
+db_fail_count = 0
 
 def get_db_connection():
-    if db_pool:
-        return db_pool.getconn()
-    else:
-        # Fallback if pool fails
-        return psycopg2.connect(os.environ['DATABASE_URL'])
+    global db_pool, db_alive, db_fail_count
+    if not db_alive:
+        return None
+    
+    if not db_pool:
+        try:
+            from psycopg2 import pool
+            db_pool = pool.ThreadedConnectionPool(
+                1, 10,
+                os.environ['DATABASE_URL'],
+                sslmode='require',
+                connect_timeout=2
+            )
+            print("Database connection pool created.")
+            db_fail_count = 0
+        except Exception as e:
+            db_fail_count += 1
+            print(f"Error creating connection pool ({db_fail_count}): {e}")
+            if db_fail_count > 2:
+                print("Disabling DB attempts (Circuit Breaker).")
+                db_alive = False
+            try:
+                return psycopg2.connect(os.environ['DATABASE_URL'], connect_timeout=2)
+            except Exception as e2:
+                return None
+    
+    try:
+        conn = db_pool.getconn()
+        db_fail_count = 0
+        return conn
+    except Exception as e:
+        db_fail_count += 1
+        if db_fail_count > 5:
+            db_alive = False
+        return None
 
 def return_db_connection(conn):
     if db_pool and conn:
@@ -63,52 +85,146 @@ def return_db_connection(conn):
         conn.close()
 
 def init_db():
-    conn = get_db_connection()
     try:
-        cur = conn.cursor()
-        # Stock Cache Table
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS stock_cache (
-                symbol TEXT PRIMARY KEY,
-                data JSONB,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        # Users Table
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                nickname TEXT UNIQUE NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        # Portfolio Table
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS portfolio_items (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                user_id UUID REFERENCES users(id),
-                symbol TEXT NOT NULL,
-                entry_price NUMERIC NOT NULL,
-                entry_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        conn.commit()
-        cur.close()
-    finally:
-        return_db_connection(conn)
+        conn = get_db_connection()
+        if not conn:
+            print("Skipping DB Init: Database unreachable.")
+            return
+        try:
+            cur = conn.cursor()
+            # Stock Cache Table
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS stock_cache (
+                    symbol TEXT PRIMARY KEY,
+                    data JSONB,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            # Users Table
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    nickname TEXT UNIQUE NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            # Portfolio Table
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS portfolio_items (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id UUID REFERENCES users(id),
+                    symbol TEXT NOT NULL,
+                    entry_price NUMERIC NOT NULL,
+                    entry_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            conn.commit()
+            cur.close()
+        finally:
+            return_db_connection(conn)
+    except Exception as e:
+        print(f"init_db failed: {e}")
+
+def fetch_from_yfinance(symbol):
+    """Fallback to yfinance for stock data"""
+    try:
+        # Normalize symbol for TW
+        ticker_symbol = symbol
+        if symbol.isdigit():
+            # Try TW then TWO
+            for suffix in [".TW", ".TWO"]:
+                test_ticker = symbol + suffix
+                t = yf.Ticker(test_ticker)
+                if t.info and 'regularMarketPrice' in t.info:
+                    ticker_symbol = test_ticker
+                    break
+        
+        t = yf.Ticker(ticker_symbol)
+        info = t.info
+        if not info or 'regularMarketPrice' not in info:
+            return None
+            
+        print(f"yfinance found data for: {ticker_symbol}")
+        
+        # Map to our structure
+        price = info.get('regularMarketPrice', 0)
+        prev_close = info.get('regularMarketPreviousClose', price)
+        change = price - prev_close
+        change_p = (change / prev_close * 100) if prev_close else 0
+        
+        # Radar/SMC Scores (Mocked from yfinance data)
+        # 1. Momentum proxy: 50d SMA vs 200d SMA
+        sma50 = info.get('fiftyDayAverage', 0)
+        sma200 = info.get('twoHundredDayAverage', 0)
+        momentum = 70 if price > sma50 > sma200 else 50
+        
+        data = {
+            "symbol": symbol,
+            "name": info.get('longName', symbol),
+            "price": price,
+            "change": change,
+            "changePercent": change_p,
+            "volume": info.get('regularMarketVolume', 0),
+            "marketCap": info.get('marketCap', 0),
+            "rvol": 1.0, # N/A in basic yf
+            "cmf": 0,
+            "vwap": price,
+            "technicalRating": 0.5 if price > sma50 else 0,
+            "analystRating": info.get('recommendationMean', 3),
+            "targetPrice": info.get('targetMedianPrice', info.get('targetMeanPrice', 0)),
+            "rsi": 50,
+            "atr_p": 2.0,
+            "sma20": info.get('fiftyDayAverage', 0), # Best we have easily
+            "sma50": sma50,
+            "sma200": sma200,
+            "perf_w": 0,
+            "perf_m": 0,
+            "perf_ytd": 0,
+            "volatility": 0,
+            "smcScore": 60 if price > sma50 else 40,
+            "prediction": {
+                 "confidence": "中 (yf fallback)",
+                 "upper": price * 1.05,
+                 "lower": price * 0.95,
+                 "days": 3
+            },
+            "radarData": [
+                {"subject": "動能 (Momentum)", "A": momentum, "fullMark": 100},
+                {"subject": "價值 (Value)", "A": 60, "fullMark": 100},
+                {"subject": "安全性 (Safety)", "A": 70, "fullMark": 100},
+                {"subject": "趨勢 (Trend)", "A": 65, "fullMark": 100},
+                {"subject": "關注 (Attention)", "A": 50, "fullMark": 100},
+            ],
+            "sector": info.get('sector', 'N/A'),
+            "industry": info.get('industry', 'N/A'),
+            "updatedAt": "yfinance fallback",
+            "source": "yfinance"
+        }
+        return data
+    except Exception as e:
+        print(f"yfinance error: {e}")
+        return None
 
 # Initialize DB on start (Note: In pure serverless like Vercel, this might run on every cold start)
-try:
-    init_db()
-except Exception as e:
-    print(f"DB Init Error: {e}")
+# try:
+#     init_db()
+# except Exception as e:
+#     print(f"DB Init Error: {e}")
 
 class handler(BaseHTTPRequestHandler):
-    def do_POST(self):
+    def _set_headers(self):
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers() # Send headers immediately
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+    def do_OPTIONS(self):
+        self._set_headers()
+
+    def do_POST(self):
+        self._set_headers()
         
         try:
             content_length = int(self.headers['Content-Length'])
@@ -185,303 +301,260 @@ class handler(BaseHTTPRequestHandler):
             # So just return error JSON if possible
             self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
 
-    def do_GET(self):
-        # ... logic for handling GET ...
-        parsed_path = urlparse(self.path)
-        query = parse_qs(parsed_path.query)
-        
-        # Leaderboard Endpoint
-        if 'leaderboard' in query:
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            
-            conn = get_db_connection()
-            try:
-                cur = conn.cursor(cursor_factory=RealDictCursor)
-                # Naive leaderboard: Average return of all items
-                # In real world, this needs more complex query or pre-calculation
-                # For now, let's just fetch recent portfolio items and return them as a feed
-                cur.execute("""
-                    SELECT u.nickname, p.symbol, p.entry_price, p.entry_date, s.data->>'price' as current_price
-                    FROM portfolio_items p
-                    JOIN users u ON p.user_id = u.id
-                    LEFT JOIN stock_cache s ON p.symbol = s.symbol
-                    ORDER BY p.entry_date DESC
-                    LIMIT 20
-                """)
-                rows = cur.fetchall()
-                # Calculate simple return % on the fly
-                results = []
-                for row in rows:
-                    curr = float(row['current_price']) if row['current_price'] else 0
-                    entry = float(row['entry_price'])
-                    ret = ((curr - entry) / entry) * 100 if curr > 0 else 0
-                    results.append({
-                        "nickname": row['nickname'],
-                        "symbol": row['symbol'],
-                        "return": ret,
-                        "date": row['entry_date']
-                    })
-                
-                self.wfile.write(json.dumps(results, default=str).encode('utf-8'))
-                cur.close()
-            except Exception as e:
-                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
-            finally:
-                return_db_connection(conn)
-            return
 
-        # Stock Lookup
-        symbol = query.get('symbol', [None])[0]
-
-        
-        self.send_response(200)
-        self.send_header('Content-type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*') # Allow CORS
-        self.end_headers()
-        
-        if not symbol:
-            response = {"error": "Missing symbol parameters"}
-            self.wfile.write(json.dumps(response).encode('utf-8'))
+    def _handle_leaderboard(self):
+        self._set_headers()
+        conn = get_db_connection()
+        if not conn:
+            self.wfile.write(json.dumps({"error": "Database unreachable"}).encode('utf-8'))
             return
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("""
+                SELECT u.nickname, p.symbol, p.entry_price, p.entry_date, s.data->>'price' as current_price
+                FROM portfolio_items p
+                JOIN users u ON p.user_id = u.id
+                LEFT JOIN stock_cache s ON p.symbol = s.symbol
+                ORDER BY p.entry_date DESC
+                LIMIT 20
+            """)
+            rows = cur.fetchall()
+            results = []
+            for row in rows:
+                curr = float(row['current_price']) if row['current_price'] else 0
+                entry = float(row['entry_price'])
+                ret = ((curr - entry) / entry) * 100 if curr > 0 else 0
+                results.append({
+                    "nickname": row['nickname'],
+                    "symbol": row['symbol'],
+                    "return": ret,
+                    "date": row['entry_date']
+                })
+            self.wfile.write(json.dumps(results, default=str).encode('utf-8'))
+            cur.close()
+        except Exception as e:
+            self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+        finally:
+            return_db_connection(conn)
+
+    def _handle_stock_lookup(self, symbol):
+        # Handle potential encoding issues from URL
+        try:
+            # If it's already a garbled string from incorrect decoding
+            if 'Å' in symbol or 'ç' in symbol:
+                symbol = symbol.encode('latin-1').decode('utf-8')
+        except: pass
 
         symbol = symbol.strip().upper()
+        print(f"Stock Lookup: {symbol}")
+        
+        # 1. Reverse Lookup if Chinese name
+        is_chinese = bool(re.search(r'[\u4e00-\u9fff]', symbol))
+        if is_chinese:
+            for ticker, name in TW_STOCK_NAMES.items():
+                if symbol == name or symbol in name or name in symbol:
+                    print(f"Found ticker {ticker} for Chinese name {symbol}")
+                    symbol = ticker
+                    is_chinese = False # Now we have a ticker
+                    break
 
-        # Check Cache
-        conn = None
-        try:
-            conn = get_db_connection()
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            
-            # Check if exists and is fresh (e.g., < 5 minutes old)
-            cur.execute("""
-                SELECT data FROM stock_cache 
-                WHERE symbol = %s 
-                AND updated_at > NOW() - INTERVAL '5 minutes'
-            """, (symbol,))
-            
-            cached_row = cur.fetchone()
-            
-            if cached_row:
-                # Cache Hit
-                response_data = cached_row['data']
-                response_data['source'] = 'cache'
-                self.wfile.write(json.dumps(response_data).encode('utf-8'))
-                
+        # 2. Check Cache
+        conn = get_db_connection()
+        if conn:
+            try:
+                cur = conn.cursor(cursor_factory=RealDictCursor)
+                cur.execute("""
+                    SELECT data FROM stock_cache 
+                    WHERE symbol = %s 
+                    AND updated_at > NOW() - INTERVAL '5 minutes'
+                """, (symbol,))
+                cached_row = cur.fetchone()
+                if cached_row:
+                    response_data = cached_row['data']
+                    response_data['source'] = 'cache'
+                    self._set_headers()
+                    self.wfile.write(json.dumps(response_data).encode('utf-8'))
+                    cur.close()
+                    return_db_connection(conn)
+                    return
                 cur.close()
+            except Exception as e:
+                print(f"Cache Read Error: {e}")
+            finally:
                 return_db_connection(conn)
-                return
-            
-            # Cache Miss or Stale -> Fetch Fresh
-            cur.close()
-            # Don't return conn yet, we might reuse it or just get a new one later. 
-            # Actually better to return it to pool and get it again to keep logic simple and safe 
-            # or keep it open. Let's return it to be safe 
-            return_db_connection(conn)
-            conn = None
 
-        except Exception as e:
-            print(f"Cache Error: {e}")
-            if conn: return_db_connection(conn)
-            # Continue to fetch fresh if cache fails
-
+        # 3. Fetch Fresh
+        self._set_headers()
         try:
-            # Determine Market
-            is_us_stock = bool(re.search(r'[A-Za-z]', symbol))
-            
+            is_us_stock = bool(re.search(r'[A-Za-z]', symbol)) and not is_chinese
             ss = StockScreener()
             if is_us_stock:
                 ss.set_markets(tvs.Market.AMERICA)
             else:
                 ss.set_markets(tvs.Market.TAIWAN)
             
+            # Select necessary fields for SMC & Health
+            ss.select(
+                StockField.NAME, StockField.DESCRIPTION, StockField.PRICE, 
+                StockField.CHANGE, StockField.CHANGE_PERCENT, StockField.VOLUME,
+                StockField.MARKET_CAPITALIZATION, StockField.SECTOR, StockField.INDUSTRY,
+                StockField.RELATIVE_VOLUME, StockField.CHAIKIN_MONEY_FLOW_20,
+                StockField.VOLUME_WEIGHTED_AVERAGE_PRICE, StockField.TECHNICAL_RATING,
+                StockField.AVERAGE_TRUE_RANGE_14, StockField.RELATIVE_STRENGTH_INDEX_14,
+                StockField.SIMPLE_MOVING_AVERAGE_20, StockField.SIMPLE_MOVING_AVERAGE_50, StockField.SIMPLE_MOVING_AVERAGE_200,
+                StockField.WEEKLY_PERFORMANCE, StockField.MONTHLY_PERFORMANCE,
+                StockField.YTD_PERFORMANCE, StockField.VOLATILITY,
+                StockField.PIOTROSKI_F_SCORE_TTM, StockField.ALTMAN_Z_SCORE_TTM,
+                StockField.GROSS_MARGIN_TTM, StockField.NET_MARGIN_TTM, StockField.OPERATING_MARGIN_TTM,
+                StockField.EPS_DILUTED_TTM_YOY_GROWTH, StockField.REVENUE_TTM_YOY_GROWTH,
+                StockField.PRICE_TO_EARNINGS_RATIO_TTM, StockField.PRICE_EARNINGS_GROWTH_TTM,
+                StockField.GRAHAM_NUMBERS_TTM, StockField.RECOMMENDATION_MARK
+            )
+
+            if symbol.isdigit():
+                 ss.add_filter(tvs.StockField.NAME, tvs.FilterOperator.EQUAL, symbol)
+            elif not is_chinese:
+                 ss.add_filter(tvs.StockField.NAME, tvs.FilterOperator.MATCH, symbol)
+            
             df = ss.get()
-            
-            if df.empty:
-                self.wfile.write(json.dumps({"error": "Stock not found"}).encode('utf-8'))
-                return
-
-            # Filter logic
-            if 'Symbol' in df.columns:
+            result = None
+            if not df.empty:
+                print(f"Columns: {df.columns.tolist()[:5]}...")
+                # Local exact match filter
                 mask = df['Name'] == symbol
-                if not mask.any() and 'Symbol' in df.columns:
-                     mask = df['Symbol'].str.contains(symbol)
-                result = df[mask]
-            else:
-                result = df
-            
-            if not result.empty:
-                data = result.iloc[0].to_dict()
-                
-                # Name Logic
-                raw_name = data.get('Description', '')
-                ticker = data.get('Name', symbol)
-                
-                if not is_us_stock:
-                    display_name = TW_STOCK_NAMES.get(ticker, raw_name)
+                if mask.any():
+                    result = df[mask]
                 else:
-                    display_name = raw_name
+                    mask = df['Description'].str.contains(symbol, case=False, na=False)
+                    if mask.any():
+                        result = df[mask]
 
-                # Target Price Logic
-                target_price = data.get('Target Price (Average)', 0)
-                price = data.get('Price', 0)
-                
-                if not is_us_stock and target_price > 0 and price > 0:
-                    if target_price < price * 0.1:
-                        potential_twd = target_price * 32.5
-                        if 0.5 * price < potential_twd < 3.0 * price:
-                             target_price = potential_twd
-                        else:
-                             target_price = 0
-                
-                # --- SMC Score Calculation ---
-                smc_score = 0
-                # 1. Volume Analysis (30pts)
-                rvol = data.get('Relative Volume', 0)
-                if rvol > 2.0: smc_score += 30
-                elif rvol > 1.2: smc_score += 15
-                
-                # 2. Money Flow (30pts)
-                cmf = data.get('Chaikin Money Flow (20)', 0)
-                if cmf > 0.05: smc_score += 30
-                elif cmf > 0: smc_score += 15
-                
-                # 3. Price vs VWAP (20pts)
-                vwap = data.get('Volume Weighted Average Price', 0)
-                if price > vwap: smc_score += 20
-                
-                # 4. Trend (20pts)
-                if data.get('Technical Rating', 0) > 0.5: smc_score += 20
-                elif data.get('Technical Rating', 0) > 0: smc_score += 10
-                
-                # --- Radar Data Calculation (Normalized 0-100) ---
-                # Momentum: RSI (50 is neutral)
-                rsi = data.get('Relative Strength Index (14)', 50)
-                momentum_score = min(100, max(0, rsi)) # RSI itself is 0-100
+            # FALLBACK TO YFINANCE
+            if result is None or result.empty:
+                print(f"No match in tvscreener for {symbol}, trying yfinance...")
+                yf_data = fetch_from_yfinance(symbol) # Helper below
+                if yf_data:
+                    self._save_to_cache(symbol, yf_data)
+                    self.wfile.write(json.dumps(yf_data, default=str).encode('utf-8'))
+                    return
+                else:
+                    self.wfile.write(json.dumps({"error": f"Symbol '{symbol}' not found"}).encode('utf-8'))
+                    return
+            
+            # 4. Map & Analyze
+            data = result.iloc[0].to_dict()
+            ticker = data.get('Name', symbol)
+            raw_name = data.get('Description', '')
+            display_name = TW_STOCK_NAMES.get(ticker, raw_name) if not is_us_stock else raw_name
+            
+            price = data.get('Price', 0)
+            target_price = data.get('Target Price (Average)', 0)
+            if not is_us_stock and target_price > 0 and price > 0:
+                if target_price < price * 0.1: # Proxy for currency mismatch
+                    target_price *= 32.5
 
-                # Value: PE (Lower is better, typically) - Mock logic as PE might be missing
-                # tvscreener doesn't always have PE. Use Perf as proxy for 'Growth/Value' mix if missing?
-                # Let's use Analyst Rating as Value proxy (Strong Buy = good value?)
-                # Analyst Rating: 1 (Strong Buy) to 5 (Sell). Inverse it.
-                analyst_rating = data.get('Analyst Rating', 3)
-                value_score = min(100, max(0, (5 - analyst_rating) * 25))
-                
-                # Safety: Inverse of Volatility/ATR
-                # ATR %: 1% is safe, 5% is volatile. 
-                atr = data.get('Average True Range % (14)', 2)
-                safety_score = min(100, max(0, 100 - (atr * 10))) 
-                
-                # Trend: Technical Rating (-1 to 1) -> 0 to 100
-                tech_rating = data.get('Technical Rating', 0)
-                trend_score = min(100, max(0, (tech_rating + 1) * 50))
-                
-                # Attention: RVOL
-                # RVOL 0.5 -> 0, RVOL 3.0 -> 100
-                attention_score = min(100, max(0, (rvol * 33)))
+            # SMC & Radar Logic
+            rvol = data.get('Relative Volume', 0)
+            cmf = data.get('Chaikin Money Flow (20)', 0)
+            vwap = data.get('Volume Weighted Average Price', 0)
+            tech_rating = data.get('Technical Rating', 0)
+            atr = data.get('Average True Range (14)', 2)
+            
+            smc_score = 0
+            if rvol > 1.5: smc_score += 30
+            if cmf > 0: smc_score += 30
+            if price > vwap: smc_score += 20
+            if tech_rating > 0: smc_score += 20
 
-                # --- Prediction Cone Calculation ---
-                # Based on ATR, predict 3-5 days range
-                # Daily ATR is atr_p (in %)
-                # Confidence: Low if volatility is high, High if volatility is low?
-                # Actually, in SMC, high vol at key level might be high confidence. 
-                # Let's keep it simple: Squeeze (low vol) = High Confidence of breakout.
-                
-                prediction_confidence = "中"
-                if atr < 1.5: prediction_confidence = "高 (波動收斂)"
-                elif atr > 3.5: prediction_confidence = "低 (劇烈波動)"
-                
-                # 3-Day Range
-                range_upper = price * (1 + (atr/100 * 3))
-                range_lower = price * (1 - (atr/100 * 3))
+            response_data = {
+                "symbol": ticker,
+                "name": display_name,
+                "price": price,
+                "change": data.get('Change', 0),
+                "changePercent": data.get('Change %', 0),
+                "volume": data.get('Volume', 0),
+                "marketCap": data.get('Market Capitalization', 0),
+                "updatedAt": "Just now",
+                "rvol": rvol, "cmf": cmf, "vwap": vwap,
+                "technicalRating": tech_rating, 
+                "analystRating": data.get('Analyst Rating', 3), 
+                "targetPrice": target_price,
+                "rsi": data.get('Relative Strength Index (14)', 50),
+                "atr_p": atr,
+                "sma20": data.get('Simple Moving Average (20)', 0),
+                "sma50": data.get('Simple Moving Average (50)', 0),
+                "sma200": data.get('Simple Moving Average (200)', 0),
+                "perf_w": data.get('Weekly Performance', 0),
+                "perf_m": data.get('Monthly Performance', 0),
+                "perf_ytd": data.get('YTD Performance', 0),
+                "volatility": data.get('Volatility', 0),
+                "smcScore": smc_score,
+                "prediction": {
+                     "confidence": "高" if atr < 2 else "中",
+                     "upper": price * (1 + (atr/100 * 3)),
+                     "lower": price * (1 - (atr/100 * 3)),
+                     "days": 3
+                },
+                "radarData": [
+                    {"subject": "動能", "A": data.get('Relative Strength Index (14)', 50), "fullMark": 100},
+                    {"subject": "趨勢", "A": (tech_rating + 1) * 50, "fullMark": 100},
+                    {"subject": "關注", "A": min(100, rvol * 33), "fullMark": 100},
+                    {"subject": "安全", "A": max(0, 100 - atr*10), "fullMark": 100},
+                    {"subject": "價值", "A": (5 - data.get('Analyst Rating', 3)) * 25, "fullMark": 100}
+                ],
+                "sector": data.get('Sector', 'N/A'),
+                "industry": data.get('Industry', 'N/A'),
+                "fScore": data.get('Piotroski F-Score (TTM)', 0),
+                "zScore": data.get('Altman Z-Score (TTM)', 0),
+                "grossMargin": data.get('Gross Margin (TTM)', 0),
+                "netMargin": data.get('Net Margin (TTM)', 0),
+                "operatingMargin": data.get('Operating Margin (TTM)', 0),
+                "epsGrowth": data.get('EPS Diluted (TTM YoY Growth)', 0),
+                "revGrowth": data.get('Revenue (TTM YoY Growth)', 0),
+                "peRatio": data.get('Price to Earnings Ratio (TTM)', 0),
+                "pegRatio": data.get('PEG Ratio (TTM)', 0),
+                "grahamNumber": data.get("Graham's Number (TTM)", 0)
+            }
+            
+            # Sanitization
+            for k, v in response_data.items():
+                if v is None or (isinstance(v, float) and math.isnan(v)):
+                    response_data[k] = 0
 
-                # Format for UI
-                response_data = {
-                    "symbol": ticker,
-                    "name": display_name,
-                    "price": price,
-                    "change": data.get('Change', 0),
-                    "changePercent": data.get('Change %', 0),
-                    # ... existing fields ...
-                    "volume": data.get('Volume', 0),
-                    "marketCap": data.get('Market Capitalization', 0),
-                    "updatedAt": "Just now",
-                    "rvol": rvol,
-                    "cmf": cmf,
-                    "vwap": vwap,
-                    "technicalRating": tech_rating, 
-                    "analystRating": analyst_rating, 
-                    "targetPrice": target_price,
-                    "rsi": rsi,
-                    "atr_p": atr,
-                    "sma20": data.get('Simple Moving Average (20)', 0),
-                    "sma50": data.get('Simple Moving Average (50)', 0),
-                    "sma200": data.get('Simple Moving Average (200)', 0),
-                    "perf_w": data.get('Weekly Performance', 0),
-                    "perf_m": data.get('Monthly Performance', 0),
-                    "perf_ytd": data.get('YTD Performance', 0),
-                    "volatility": data.get('Volatility', 0),
-                    "earningsDate": data.get('Upcoming Earnings Date', 0),
-                    # New AI Data
-                    "smcScore": smc_score,
-                    "prediction": {
-                         "confidence": prediction_confidence,
-                         "upper": range_upper,
-                         "lower": range_lower,
-                         "days": 3
-                    },
-                    "radarData": [
-                        {"subject": "動能 (Momentum)", "A": momentum_score, "fullMark": 100},
-                        {"subject": "價值 (Value)", "A": value_score, "fullMark": 100},
-                        {"subject": "安全性 (Safety)", "A": safety_score, "fullMark": 100},
-                        {"subject": "趨勢 (Trend)", "A": trend_score, "fullMark": 100},
-                        {"subject": "關注 (Attention)", "A": attention_score, "fullMark": 100},
-                    ],
-                    # Fundamental Data
-                    "sector": data.get('Sector', 'N/A'),
-                    "industry": data.get('Industry', 'N/A'),
-                    "employees": data.get('Number of Employees', 0),
-                    "fScore": data.get('Piotroski F-Score (TTM)', 0),
-                    "zScore": data.get('Altman Z-Score (TTM)', 0),
-                    "grossMargin": data.get('Gross Margin (TTM)', 0),
-                    "netMargin": data.get('Net Margin (TTM)', 0),
-                    "operatingMargin": data.get('Operating Margin (TTM)', 0),
-                    "epsGrowth": data.get('EPS Diluted (TTM YoY Growth)', 0),
-                    "revGrowth": data.get('Revenue (TTM YoY Growth)', 0),
-                    "peRatio": data.get('Price to Earnings Ratio (TTM)', 0),
-                    "pegRatio": data.get('PEG Ratio (TTM)', 0),
-                    "grahamNumber": data.get("Graham's Number (TTM)", 0)
-                }
-                
-                # Sanitization
-                for k, v in response_data.items():
-                    if v is None:
-                        response_data[k] = 0
-                    elif isinstance(v, float) and math.isnan(v):
-                        response_data[k] = 0
+            self._save_to_cache(symbol, response_data)
+            self.wfile.write(json.dumps(response_data, default=str).encode('utf-8'))
 
-                # Update Cache
-                conn_cache = None # Use a separate connection variable for cache write
-                try:
-                    conn_cache = get_db_connection()
-                    cur = conn_cache.cursor()
-                    cur.execute("""
-                        INSERT INTO stock_cache (symbol, data, updated_at)
-                        VALUES (%s, %s, NOW())
-                        ON CONFLICT (symbol) 
-                        DO UPDATE SET data = EXCLUDED.data, updated_at = NOW();
-                    """, (symbol, json.dumps(response_data, default=str))) # Added default=str
-                    conn_cache.commit()
-                    cur.close()
-                    return_db_connection(conn_cache)
-                except Exception as e:
-                    print(f"Cache Write Error: {e}")
-                    if conn_cache: return_db_connection(conn_cache)
-
-                self.wfile.write(json.dumps(response_data, default=str).encode('utf-8')) # Added default=str
-            else:
-                self.wfile.write(json.dumps({"error": f"Symbol '{symbol}' not found"}).encode('utf-8'))
-                
         except Exception as e:
-            self.wfile.write(json.dumps({"error": f"Internal Error: {str(e)}"}).encode('utf-8'))
+            print(f"Lookup Error: {e}")
+            self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+
+    def _save_to_cache(self, symbol, response_data):
+        conn = get_db_connection()
+        if not conn: return
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO stock_cache (symbol, data, updated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (symbol) 
+                DO UPDATE SET data = EXCLUDED.data, updated_at = NOW();
+            """, (symbol, json.dumps(response_data, default=str)))
+            conn.commit()
+            cur.close()
+        except: pass
+        finally: return_db_connection(conn)
+
+    def do_GET(self):
+        print(f"GET Request: {self.path}")
+        try:
+            query = parse_qs(urlparse(self.path).query)
+            if 'leaderboard' in query:
+                self._handle_leaderboard()
+            elif 'symbol' in query:
+                self._handle_stock_lookup(query['symbol'][0])
+            else:
+                self._set_headers()
+                self.wfile.write(json.dumps({"error": "Invalid endpoint"}).encode('utf-8'))
+        except Exception as e:
+            print(f"Global GET Error: {e}")
+

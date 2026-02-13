@@ -53,85 +53,94 @@ export function HealthCheck({ data }: HealthCheckProps) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
                 {/* 1. Financial Health (Scores) */}
-                <div className="space-y-4 p-4 rounded-2xl bg-black/20 border border-white/5">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-zinc-400 flex items-center gap-1">
-                            <ShieldCheck className="h-4 w-4" /> 財務強度
-                        </span>
-                    </div>
+                <div className="space-y-4 p-5 rounded-2xl bg-black/20 border border-white/5 flex flex-col justify-between">
+                    <div>
+                        <div className="flex items-center justify-between mb-4">
+                            <span className="text-sm font-medium text-zinc-400 flex items-center gap-1">
+                                <ShieldCheck className="h-4 w-4" /> 財務強度
+                            </span>
+                        </div>
 
-                    <div className="flex justify-between items-center">
-                        <span className="text-sm">Piotroski F-Score</span>
-                        <span className={cn("font-mono font-bold text-lg", getScoreColor(data.fScore, 9))}>
-                            {data.fScore} / 9
-                        </span>
-                    </div>
-                    <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                        <div className={cn("h-full rounded-full", getScoreColor(data.fScore, 9).replace('text-', 'bg-'))} style={{ width: `${(data.fScore / 9) * 100}%` }} />
-                    </div>
+                        <div className="space-y-4">
+                            <div>
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-xs text-zinc-500 uppercase">Piotroski F-Score</span>
+                                    <span className={cn("font-mono font-bold text-xl", getScoreColor(data.fScore, 9))}>
+                                        {data.fScore} <span className="text-xs font-normal text-zinc-600">/ 9</span>
+                                    </span>
+                                </div>
+                                <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                                    <div className={cn("h-full rounded-full transition-all duration-1000", getScoreColor(data.fScore, 9).replace('text-', 'bg-'))} style={{ width: `${(data.fScore / 9) * 100}%` }} />
+                                </div>
+                            </div>
 
-                    <div className="flex justify-between items-center mt-2">
-                        <span className="text-sm">Altman Z-Score</span>
-                        <span className={cn("font-mono font-bold text-lg", getZScoreColor(data.zScore))}>
-                            {data.zScore.toFixed(2)}
-                        </span>
+                            <div>
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-xs text-zinc-500 uppercase">Altman Z-Score</span>
+                                    <span className={cn("font-mono font-bold text-xl", getZScoreColor(data.zScore))}>
+                                        {data.zScore > 0 ? data.zScore.toFixed(2) : "N/A"}
+                                    </span>
+                                </div>
+                                <p className="text-[10px] text-zinc-500 text-right italic">
+                                    {data.zScore > 2.99 ? "財務安全" : data.zScore > 1.81 ? "灰色地帶" : data.zScore > 0 ? "財務預警" : "數據缺失"}
+                                </p>
+                            </div>
+                        </div>
                     </div>
-                    <p className="text-xs text-zinc-500 text-right">
-                        {data.zScore > 2.99 ? "財務安全" : data.zScore > 1.81 ? "灰色地帶" : "財務預警"}
-                    </p>
                 </div>
 
                 {/* 2. Profitability (Margins) */}
-                <div className="space-y-4 p-4 rounded-2xl bg-black/20 border border-white/5">
+                <div className="space-y-4 p-5 rounded-2xl bg-black/20 border border-white/5">
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium text-zinc-400 flex items-center gap-1">
                             <TrendingUp className="h-4 w-4" /> 獲利能力 (TTM)
                         </span>
                     </div>
 
-                    <div className="space-y-3">
-                        <div className="flex justify-between text-sm">
-                            <span className="text-zinc-400">毛利率 (Gross)</span>
-                            <span className="font-mono font-bold">{data.grossMargin.toFixed(1)}%</span>
+                    <div className="space-y-4 py-2">
+                        <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                            <span className="text-sm text-zinc-400">毛利率 (Gross)</span>
+                            <span className="font-mono font-bold text-lg">{data.grossMargin > 0 ? data.grossMargin.toFixed(1) + "%" : "N/A"}</span>
                         </div>
-                        <div className="flex justify-between text-sm">
-                            <span className="text-zinc-400">營益率 (Operating)</span>
-                            <span className="font-mono font-bold">{data.operatingMargin.toFixed(1)}%</span>
+                        <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                            <span className="text-sm text-zinc-400">營益率 (Operating)</span>
+                            <span className="font-mono font-bold text-lg">{data.operatingMargin > 0 ? data.operatingMargin.toFixed(1) + "%" : "N/A"}</span>
                         </div>
-                        <div className="flex justify-between text-sm">
-                            <span className="text-zinc-400">淨利率 (Net)</span>
-                            <span className={cn("font-mono font-bold", data.netMargin > 0 ? "text-emerald-400" : "text-rose-400")}>
-                                {data.netMargin.toFixed(1)}%
+                        <div className="flex justify-between items-center pb-2">
+                            <span className="text-sm text-zinc-400">淨利率 (Net)</span>
+                            <span className={cn("font-mono font-bold text-lg", data.netMargin > 0 ? "text-emerald-400" : "text-rose-400")}>
+                                {data.netMargin !== 0 ? data.netMargin.toFixed(1) + "%" : "N/A"}
                             </span>
                         </div>
                     </div>
                 </div>
 
                 {/* 3. Valuation (Graham & PEG) */}
-                <div className="space-y-4 p-4 rounded-2xl bg-black/20 border border-white/5">
+                <div className="space-y-4 p-5 rounded-2xl bg-black/20 border border-white/5">
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium text-zinc-400 flex items-center gap-1">
                             <DollarSign className="h-4 w-4" /> 價值評估
                         </span>
                     </div>
 
-                    <div className="text-center py-2">
-                        <div className={cn("text-2xl font-bold mb-1", valuation.color)}>
+                    <div className="text-center py-4">
+                        <div className={cn("text-3xl font-bold mb-2 tracking-tight", valuation.color)}>
                             {valuation.text}
                         </div>
-                        <div className="text-xs text-zinc-500">
-                            目前股價 vs 葛拉漢合理價 <span className="font-mono ml-1">${data.grahamNumber > 0 ? data.grahamNumber.toFixed(1) : "N/A"}</span>
+                        <div className="text-[10px] text-zinc-500 uppercase leading-relaxed text-balance px-2">
+                            目前股價 vs 葛拉漢合理價 <br />
+                            <span className="font-mono text-zinc-400 text-xs">{data.grahamNumber > 0 ? `$${data.grahamNumber.toFixed(1)}` : "數據暫缺"}</span>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 text-center border-t border-white/5 pt-2">
+                    <div className="grid grid-cols-2 gap-4 text-center border-t border-white/5 pt-4">
                         <div>
-                            <div className="text-xs text-zinc-500">P/E Ratio</div>
-                            <div className="font-mono font-bold text-sm text-zinc-300">{data.peRatio > 0 ? data.peRatio.toFixed(1) : "N/A"}</div>
+                            <div className="text-[10px] text-zinc-500 uppercase mb-1">P/E Ratio</div>
+                            <div className="font-mono font-bold text-base text-zinc-300">{data.peRatio > 0 ? data.peRatio.toFixed(1) : "N/A"}</div>
                         </div>
                         <div>
-                            <div className="text-xs text-zinc-500">PEG Ratio</div>
-                            <div className={cn("font-mono font-bold text-sm",
+                            <div className="text-[10px] text-zinc-500 uppercase mb-1">PEG Ratio</div>
+                            <div className={cn("font-mono font-bold text-base",
                                 data.pegRatio > 0 && data.pegRatio < 1 ? "text-emerald-400" :
                                     data.pegRatio > 1.5 ? "text-rose-400" : "text-zinc-300"
                             )}>{data.pegRatio > 0 ? data.pegRatio.toFixed(2) : "N/A"}</div>

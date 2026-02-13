@@ -1,0 +1,45 @@
+export interface StockData {
+    symbol: string
+    name?: string
+    price: number
+    change: number
+    changePercent: number
+    volume: number
+    marketCap?: number
+    updatedAt?: string
+    rvol: number
+    cmf: number
+    vwap: number
+    technicalRating: number
+    analystRating: number
+    targetPrice: number
+    rsi: number
+    atr_p: number
+    sma20: number
+    sma50: number
+    sma200: number
+    perf_w: number
+    perf_m: number
+    perf_ytd: number
+    volatility: number
+    smcScore: number
+    prediction?: {
+        confidence: string
+        upper: number
+        lower: number
+        days: number
+    }
+    radarData?: any[]
+    sector: string
+    industry: string
+    fScore: number
+    zScore: number
+    grossMargin: number
+    netMargin: number
+    operatingMargin: number
+    epsGrowth: number
+    revGrowth: number
+    peRatio: number
+    pegRatio: number
+    grahamNumber: number
+}
