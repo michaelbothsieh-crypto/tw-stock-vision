@@ -10,3 +10,6 @@ Stock Lookup: 2330 -> Cleaned: 2330
 Global GET Error: trying to put unkeyed connection
 GET Request: /api/stock?symbol=2330
 Stock Lookup: 2330 -> Cleaned: 2330
+GET Request: /?leaderboard=trueGET Request: /?symbol=2330
+
+Stock Lookup: 2330 -> Cleaned: 2330

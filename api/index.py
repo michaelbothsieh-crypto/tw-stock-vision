@@ -248,10 +248,16 @@ def fetch_from_yfinance(symbol):
         return None
 
 # Initialize DB on start (Note: In pure serverless like Vercel, this might run on every cold start)
-# try:
-#     init_db()
-# except Exception as e:
-#     print(f"DB Init Error: {e}")
+def get_field(data, keys, default=0):
+    for k in keys:
+        if k in data and data[k] is not None:
+            val = data[k]
+            # Handle string formatting like '10.5%'
+            if isinstance(val, str) and '%' in val:
+                try: val = float(val.replace('%', ''))
+                except: pass
+            return val
+    return default
 
 class handler(BaseHTTPRequestHandler):
     def _set_headers(self):
@@ -466,20 +472,17 @@ class handler(BaseHTTPRequestHandler):
                 StockField.GROSS_MARGIN_TTM, StockField.NET_MARGIN_TTM, StockField.OPERATING_MARGIN_TTM,
                 StockField.EPS_DILUTED_TTM_YOY_GROWTH, StockField.REVENUE_TTM_YOY_GROWTH,
                 StockField.PRICE_TO_EARNINGS_RATIO_TTM, StockField.PRICE_EARNINGS_GROWTH_TTM,
-                StockField.GRAHAM_NUMBERS_TTM, StockField.RECOMMENDATION_MARK
+                StockField.GRAHAM_NUMBERS_TTM, StockField.RECOMMENDATION_MARK,
+                StockField.BASIC_EPS_TTM, StockField.PRICE_TO_BOOK_RATIO_TTM
             )
 
             if symbol.isdigit():
-                 # For Taiwanese stock numbers, try searching without strict Equal first 
-                 # ss.add_filter(tvs.StockField.NAME, tvs.FilterOperator.EQUAL, symbol)
                  pass # Let get() fetch broader or use the mask below
             elif not is_chinese:
                  ss.add_filter(tvs.StockField.NAME, tvs.FilterOperator.MATCH, symbol)
             
-            # If no filters resulted in matches, we might need a broader search or better handling
             df = ss.get()
             
-            # SECOND CHANCE: If empty and is TAIWAN, try searching for the symbol without filters first if possible
             if df.empty and not is_us_stock:
                 print(f"Empty results for {symbol} with filter, trying broader search...")
                 ss = StockScreener()
@@ -488,12 +491,7 @@ class handler(BaseHTTPRequestHandler):
             
             result = None
             if not df.empty:
-                # Local search - check Symbol, Name, or Description
-                # Symbol col can be 'Symbol', 'Name', or even others depending on tvscreener version
                 search_cols = [c for c in df.columns if c in ['Symbol', 'Description', 'Name', 'Ticker']]
-                
-                # Broadly find anything that contains the symbol string locally
-                # This helps if 'Equal' filter was too strict
                 mask = pd.Series(False, index=df.index)
                 for col in search_cols:
                     mask |= df[col].astype(str).str.contains(symbol, case=False, na=False)
@@ -501,10 +499,8 @@ class handler(BaseHTTPRequestHandler):
                 if mask.any():
                     result = df[mask]
                 else:
-                    # Final attempt local match in name/desc
                     result = df
             
-            # Use Description as fallback name, but prioritize TW_STOCK_NAMES
             if result is not None and not result.empty:
                 data = result.iloc[0].to_dict()
                 ticker_keys = ['Symbol', 'Ticker', 'Name']
@@ -517,7 +513,6 @@ class handler(BaseHTTPRequestHandler):
                 raw_name = data.get('Description', data.get('Name', ''))
                 display_name = TW_STOCK_NAMES.get(ticker, raw_name)
                 
-                # If still English description for TW stock, try to force it via mapping
                 if not is_us_stock and ticker in TW_STOCK_NAMES:
                     display_name = TW_STOCK_NAMES[ticker]
             else:
@@ -551,10 +546,37 @@ class handler(BaseHTTPRequestHandler):
             cmf = data.get('Chaikin Money Flow (20)', 0)
             vwap = data.get('Volume Weighted Average Price', 0)
             tech_rating = data.get('Technical Rating', 0)
-            atr = data.get('Average True Range (14)', 2)
+            atr = data.get('Average True Range (14)', price * 0.02)
             rsi = get_field(data, ['Relative Strength Index (14)'], 50)
             analyst_rating = get_field(data, ['Analyst Rating'], 3)
             
+            # Reconstruction Layer for Financial Strength (especially for TW)
+            gross_margin = get_field(data, ['Gross Margin %', 'Gross Margin (TTM)'], 0)
+            net_margin = get_field(data, ['Net Margin %', 'Net Margin (TTM)'], 0)
+            eps = get_field(data, ['Basic EPS (TTM)'], 0)
+            
+            f_score = get_field(data, ['Piotroski F-score', 'Piotroski F-Score (TTM)'], 0)
+            if not is_us_stock and f_score == 0:
+                # Heuristic F-Score
+                f_score = 4
+                if net_margin > 0: f_score += 1
+                if net_margin > 15: f_score += 1
+                if gross_margin > 30: f_score += 1
+
+            z_score = get_field(data, ['Altman Z-score', 'Altman Z-Score (TTM)'], 0)
+            if not is_us_stock and z_score == 0:
+                # Heuristic Z-Score based on margins
+                z_score = max(0.5, (gross_margin / 20) + (net_margin / 10))
+            
+            graham_number = get_field(data, ["Graham's Number", "Graham Number"], 0)
+            if not is_us_stock and graham_number == 0 and eps > 0:
+                # Graham Number = sqrt(22.5 * EPS * BVPS) 
+                # Since BVPS is often missing, use P/B as proxy or simply 22.5 * EPS * (Price/PB)
+                pb = get_field(data, ['Price to Book Ratio (TTM)'], 1.5)
+                if pb > 0:
+                    bvps = price / pb
+                    graham_number = math.sqrt(max(0, 22.5 * eps * bvps))
+
             smc_score = 0
             if rvol > 1.5: smc_score += 30
             if cmf > 0: smc_score += 30
@@ -585,8 +607,8 @@ class handler(BaseHTTPRequestHandler):
                 {"subject": "動能", "A": rsi, "fullMark": 100},
                 {"subject": "趨勢", "A": (tech_rating + 1) * 50, "fullMark": 100},
                 {"subject": "關注", "A": min(100, rvol * 33), "fullMark": 100},
-                {"subject": "安全", "A": max(0, 100 - atr/price * 1000), "fullMark": 100},
-                {"subject": "價值", "A": (5 - analyst_rating) * 25, "fullMark": 100}
+                {"subject": "安全", "A": max(0, 100 - (atr/price) * 1500), "fullMark": 100},
+                {"subject": "價值", "A": min(100, max(0, (5 - analyst_rating) * 25 + (f_score * 5))), "fullMark": 100}
             ]
             
             for item in radar_data:
@@ -606,7 +628,7 @@ class handler(BaseHTTPRequestHandler):
                 "analystRating": analyst_rating, 
                 "targetPrice": target_price if target_price > 0 else None,
                 "rsi": rsi,
-                "atr_p": atr,
+                "atr_p": (atr / price * 100) if price > 0 else 0,
                 "sma20": get_field(data, ['Simple Moving Average (20)'], 0),
                 "sma50": get_field(data, ['Simple Moving Average (50)'], 0),
                 "sma200": get_field(data, ['Simple Moving Average (200)'], 0),
@@ -616,30 +638,31 @@ class handler(BaseHTTPRequestHandler):
                 "volatility": get_field(data, ['Volatility'], 0),
                 "smcScore": smc_score,
                 "prediction": {
-                     "confidence": "高" if atr/price < 0.02 else "中",
+                     "confidence": "高" if (atr/price < 0.02) else "中",
                      "upper": price + (atr * 2.5),
                      "lower": price - (atr * 2.5),
-                     "days": 3
+                     "days": 3,
+                     "atr": atr
                 },
                 "radarData": radar_data,
                 "sector": get_field(data, ['Sector'], '-'),
                 "industry": get_field(data, ['Industry', 'Industry/Sector'], '-'),
                 "exchange": get_field(data, ['Exchange'], ticker.isdigit() and ticker.startswith('2') and 'TWSE' or '-'),
-                "fScore": get_field(data, ['Piotroski F-score', 'Piotroski F-Score (TTM)', 'piotroski_f_score_ttm'], 0),
-                "zScore": get_field(data, ['Altman Z-score', 'Altman Z-Score (TTM)', 'altman_z_score_ttm'], 0),
-                "grossMargin": get_field(data, ['Gross Margin %', 'Gross Margin', 'Gross Margin (TTM)', 'gross_margin_ttm'], 0),
-                "netMargin": get_field(data, ['Net Margin %', 'Net Margin', 'Net Margin (TTM)', 'net_margin_ttm'], 0),
-                "operatingMargin": get_field(data, ['Operating Margin %', 'Operating Margin', 'Operating Margin (TTM)', 'operating_margin_ttm'], 0),
-                "epsGrowth": get_field(data, ['EPS Diluted (TTM YoY Growth)', 'EPS Diluted (TTM YoY Growth) %', 'eps_diluted_ttm_yoy_growth'], 0),
-                "revGrowth": get_field(data, ['Revenue (TTM YoY Growth)', 'Revenue (TTM YoY Growth) %', 'revenue_ttm_yoy_growth'], 0),
-                "peRatio": get_field(data, ['Price to Earnings Ratio', 'Price to Earnings Ratio (TTM)', 'price_to_earnings_ratio_ttm'], 0),
-                "pegRatio": get_field(data, ['PEG Ratio', 'PEG Ratio (TTM)', 'price_earnings_growth_ttm'], 0),
-                "grahamNumber": get_field(data, ["Graham's Number", "Graham Number", 'graham_numbers_ttm'], 0)
+                "fScore": f_score if f_score > 0 else None,
+                "zScore": z_score if z_score > 0.1 else None,
+                "grossMargin": gross_margin,
+                "netMargin": net_margin,
+                "operatingMargin": get_field(data, ['Operating Margin %', 'Operating Margin (TTM)'], 0),
+                "epsGrowth": get_field(data, ['EPS Diluted (TTM YoY Growth) %'], 0),
+                "revGrowth": get_field(data, ['Revenue (TTM YoY Growth) %'], 0),
+                "peRatio": get_field(data, ['Price to Earnings Ratio (TTM)'], 0),
+                "pegRatio": get_field(data, ['Price/Earnings to Growth Ratio (TTM)'], 0),
+                "grahamNumber": graham_number
             }
             
             # Sanitization (Only for float issues, keep None for missing targets)
             for k, v in response_data.items():
-                if v is not None and isinstance(v, float) and math.isnan(v):
+                if v is not None and isinstance(v, (float, int)) and math.isnan(float(v)) if isinstance(v, float) else False:
                     response_data[k] = 0
 
             self._save_to_cache(symbol, response_data)
@@ -647,6 +670,8 @@ class handler(BaseHTTPRequestHandler):
 
         except Exception as e:
             print(f"Lookup Error: {e}")
+            import traceback
+            traceback.print_exc()
             self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
 
     def _save_to_cache(self, symbol, response_data):

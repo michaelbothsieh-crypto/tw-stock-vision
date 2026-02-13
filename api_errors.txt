@@ -3,3 +3,5 @@
 127.0.0.1 - - [13/Feb/2026 21:58:44] "GET /?leaderboard=true HTTP/1.1" 200 -
 127.0.0.1 - - [13/Feb/2026 21:58:50] "GET /?symbol=2330 HTTP/1.1" 200 -
 127.0.0.1 - - [13/Feb/2026 22:03:02] "GET /api/stock?symbol=2330 HTTP/1.1" 200 -
+127.0.0.1 - - [13/Feb/2026 22:40:51] "GET /?leaderboard=true HTTP/1.1" 200 -
+127.0.0.1 - - [13/Feb/2026 22:40:52] "GET /?symbol=2330 HTTP/1.1" 200 -
