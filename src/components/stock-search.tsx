@@ -27,7 +27,7 @@ const StockSearch = React.forwardRef<HTMLInputElement, SearchProps>(
                         className
                     )}
                     ref={ref}
-                    placeholder="輸入股票代號 (例如 2330)"
+                    placeholder="輸入代號 (2330) 或美股 (AAPL)..."
                     value={value}
                     onChange={(e) => setValue(e.target.value)}
                     {...props}

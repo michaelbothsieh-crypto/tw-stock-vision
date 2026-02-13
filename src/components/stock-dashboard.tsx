@@ -1,6 +1,8 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
+import confetti from "canvas-confetti"
 import { cn } from "@/lib/utils"
 
 interface StockData {
@@ -40,6 +42,53 @@ interface StockDashboardProps {
 }
 
 export function StockDashboard({ data, loading, error }: StockDashboardProps) {
+    const [aiComment, setAiComment] = useState<string>("")
+
+    useEffect(() => {
+        if (data) {
+            // Trigger confetti if gain > 3%
+            if (data.changePercent > 3) {
+                const duration = 3 * 1000
+                const animationEnd = Date.now() + duration
+                const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 }
+
+                const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min
+
+                const interval: any = setInterval(function () {
+                    const timeLeft = animationEnd - Date.now()
+
+                    if (timeLeft <= 0) {
+                        return clearInterval(interval)
+                    }
+
+                    const particleCount = 50 * (timeLeft / duration)
+                    confetti({
+                        ...defaults,
+                        particleCount,
+                        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+                    })
+                    confetti({
+                        ...defaults,
+                        particleCount,
+                        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+                    })
+                }, 250)
+            }
+
+            // Generate AI Comment
+            let comment = "穩健觀察中... ☕"
+            if (data.changePercent > 5) comment = "飛向宇宙，浩瀚無垠！🚀"
+            else if (data.changePercent < -5) comment = "這是在特價嗎？還是接刀？🔪"
+            else if (data.rsi > 75) comment = "RSI 過熱！少年股神請冷靜 🔥"
+            else if (data.rsi < 25) comment = "RSI 超賣！人棄我取... 嗎？💎"
+            else if (data.rvol > 2.5) comment = "量能爆棚！主力在搞事？📢"
+            else if (data.technicalRating > 0.5) comment = "技術面強勢，趨勢是你的朋友！📈"
+            else if (data.technicalRating < -0.5) comment = "技術面疲弱，保守為上。🛡️"
+
+            setAiComment(comment)
+        }
+    }, [data])
+
     if (loading) {
         return (
             <div className="flex h-64 items-center justify-center">
@@ -51,7 +100,7 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
     if (error) {
         return (
             <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-destructive">
-                Error: {error}
+                錯誤: {error}
             </div>
         )
     }
@@ -59,7 +108,7 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
     if (!data) {
         return (
             <div className="flex h-64 items-center justify-center text-muted-foreground">
-                Enter a stock symbol to view data
+                輸入股票代號以查看數據
             </div>
         )
     }
@@ -73,21 +122,37 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
             className="grid gap-6"
         >
             {/* Header Card */}
-            <div className="rounded-3xl border border-border/50 bg-card/50 p-8 shadow-xl backdrop-blur-sm">
-                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            <div className="rounded-3xl border border-border/50 bg-card/50 p-8 shadow-xl backdrop-blur-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-10 text-9xl">
+                    {isPositive ? "🐂" : "🐻"}
+                </div>
+
+                <div className="relative z-10 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                     <div>
                         <div className="flex items-baseline gap-3">
                             <h2 className="text-4xl font-bold tracking-tight text-foreground">{data.symbol}</h2>
                             <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-secondary-foreground">
-                                TWSE
+                                {data.symbol.match(/[A-Z]/) ? "US" : "TWSE"}
                             </span>
                         </div>
-                        <p className="mt-1 text-lg text-muted-foreground">{data.name}</p>
+                        <p className="mt-1 text-2xl font-bold text-primary/90">{data.name || data.symbol}</p>
+
+                        {/* AI Comment Bubble */}
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ delay: 0.5 }}
+                            className="mt-4 inline-block rounded-2xl bg-primary/10 px-4 py-2 text-primary font-medium border border-primary/20"
+                        >
+                            🤖 AI 點評: {aiComment}
+                        </motion.div>
                     </div>
+
                     <div className={cn(
                         "flex flex-col items-end text-right",
                         isPositive ? "text-emerald-400" : "text-rose-400"
                     )}>
+                        <h3 className="text-sm font-medium text-muted-foreground mb-1">即時報價</h3>
                         <span className="text-6xl font-bold font-mono tracking-tighter shadow-glow">
                             {data.price.toFixed(2)}
                         </span>
@@ -101,13 +166,13 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                 <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-5">
                     <Stat label="成交量" value={(data.volume || 0).toLocaleString()} />
                     <Stat label="市值" value={data.marketCap ? formatMarketCap(data.marketCap) : "--"} />
-                    <Stat label="RVOL" value={(data.rvol || 0).toFixed(2) + "x"}
-                        subtext={(data.rvol || 0) > 1.5 ? "🔥 High Activity" : "Normal"}
+                    <Stat label="相對量能 (RVOL)" value={(data.rvol || 0).toFixed(2) + "x"}
+                        subtext={(data.rvol || 0) > 1.5 ? "🔥 交易熱絡" : "正常"}
                         color={(data.rvol || 0) > 1.5 ? "text-amber-400" : undefined} />
-                    <Stat label="VWAP" value={(data.vwap || 0).toFixed(2)}
-                        subtext={data.price > (data.vwap || 0) ? "Bullish > VWAP" : "Bearish < VWAP"}
+                    <Stat label="成交量加權價 (VWAP)" value={(data.vwap || 0).toFixed(2)}
+                        subtext={data.price > (data.vwap || 0) ? "多頭強勢 > VWAP" : "空頭弱勢 < VWAP"}
                         color={data.price > (data.vwap || 0) ? "text-emerald-400" : "text-rose-400"} />
-                    <Stat label="CMF (Flow)" value={(data.cmf || 0).toFixed(2)}
+                    <Stat label="資金流向 (CMF)" value={(data.cmf || 0).toFixed(2)}
                         color={(data.cmf || 0) > 0 ? "text-emerald-400" : "text-rose-400"} />
                 </div>
             </div>
@@ -126,18 +191,28 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                             <span className="mt-2 font-semibold text-lg">
                                 {getRatingText(data.technicalRating || 0)}
                             </span>
-                            <span className="text-xs text-muted-foreground uppercase tracking-widest mt-1">Technical</span>
+                            <span className="text-xs text-muted-foreground uppercase tracking-widest mt-1">技術指標</span>
                         </div>
                         {/* Analyst Rating */}
-                        <div className="flex flex-col items-center justify-center p-4 bg-background/20 rounded-2xl">
+                        <div className="flex flex-col items-center justify-center p-4 bg-background/20 rounded-2xl text-center">
                             <span className="text-sm text-muted-foreground mb-1">分析師目標價</span>
-                            <span className="text-3xl font-mono font-bold text-foreground">{(data.targetPrice || 0) > 0 ? (data.targetPrice || 0).toFixed(0) : "N/A"}</span>
-                            {(data.targetPrice || 0) > 0 && (
-                                <span className={cn("text-xs font-medium mt-1 px-2 py-0.5 rounded",
-                                    (data.targetPrice || 0) > data.price ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
-                                )}>
-                                    {(((data.targetPrice || 0) - data.price) / data.price * 100).toFixed(1)}% Upside
-                                </span>
+
+                            {(data.targetPrice || 0) > 0 ? (
+                                <>
+                                    <span className="text-3xl font-mono font-bold text-foreground">
+                                        {(data.targetPrice || 0).toFixed(2)}
+                                    </span>
+                                    <span className={cn("text-xs font-medium mt-1 px-2 py-0.5 rounded",
+                                        (data.targetPrice || 0) > data.price ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                                    )}>
+                                        {(((data.targetPrice || 0) - data.price) / data.price * 100).toFixed(1)}% 潛在空間
+                                    </span>
+                                </>
+                            ) : (
+                                <div className="text-muted-foreground">
+                                    <span className="text-2xl block mb-1">🤷‍♂️</span>
+                                    <span className="text-xs">數據不足或暫無目標價</span>
+                                </div>
                             )}
                         </div>
                     </div>
@@ -149,14 +224,14 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                         <span className="text-2xl">🩺</span> 每日健檢 (Daily Vitals)
                     </h3>
                     <div className="grid grid-cols-2 gap-4">
-                        <VitalRow label="RSI (14)" value={(data.rsi || 50).toFixed(1)} status={getRsiStatus(data.rsi || 50)} />
-                        <VitalRow label="ATR Volatility" value={(data.atr_p || 0).toFixed(2) + "%"} status="neutral" />
-                        <VitalRow label="Rel Strength (1M)" value={(data.perf_m || 0).toFixed(2) + "%"} status={(data.perf_m || 0) > 0 ? "good" : "bad"} />
-                        <VitalRow label="Rel Strength (YTD)" value={(data.perf_ytd || 0).toFixed(2) + "%"} status={(data.perf_ytd || 0) > 0 ? "good" : "bad"} />
+                        <VitalRow label="RSI (強弱指標)" value={(data.rsi || 50).toFixed(1)} status={getRsiStatus(data.rsi || 50)} />
+                        <VitalRow label="ATR 波動率" value={(data.atr_p || 0).toFixed(2) + "%"} status="neutral" />
+                        <VitalRow label="月績效" value={(data.perf_m || 0).toFixed(2) + "%"} status={(data.perf_m || 0) > 0 ? "good" : "bad"} />
+                        <VitalRow label="今年以來績效" value={(data.perf_ytd || 0).toFixed(2) + "%"} status={(data.perf_ytd || 0) > 0 ? "good" : "bad"} />
 
                         <div className="col-span-2 mt-2 pt-4 border-t border-border/30">
                             <div className="flex justify-between items-center text-sm mb-2">
-                                <span className="text-muted-foreground">SMA Trend Alignment</span>
+                                <span className="text-muted-foreground">均線趨勢對齊 (SMA Trend)</span>
                             </div>
                             <div className="flex gap-1 h-2 w-full rounded-full overflow-hidden bg-secondary">
                                 <div className={cn("h-full flex-1 opacity-80", data.price > (data.sma20 || 0) ? "bg-emerald-500" : "bg-rose-500")} title="Price > SMA20" />
@@ -164,9 +239,9 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                                 <div className={cn("h-full flex-1 opacity-80", data.price > (data.sma200 || 0) ? "bg-emerald-500" : "bg-rose-500")} title="Price > SMA200" />
                             </div>
                             <div className="flex justify-between text-[10px] text-muted-foreground mt-1 px-1">
-                                <span>Short-term</span>
-                                <span>Mid-term</span>
-                                <span>Long-term</span>
+                                <span>短線 (20MA)</span>
+                                <span>中線 (50MA)</span>
+                                <span>長線 (200MA)</span>
                             </div>
                         </div>
                     </div>
@@ -174,7 +249,7 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
             </div>
 
             <div className="text-center text-xs text-muted-foreground opacity-50 pb-8">
-                *SMC Proxy Indicators (RVOL, CMF) are derived from real-time data snapshots.
+                *SMC 指標 (RVOL, CMF) 基於即時數據快照計算.
             </div>
         </motion.div>
     )
@@ -182,7 +257,7 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
 
 function Stat({ label, value, subtext, color }: { label: string; value: string | number, subtext?: string, color?: string }) {
     return (
-        <div className="flex flex-col gap-1 p-4 rounded-2xl bg-background/40 border border-border/30 backdrop-blur-md">
+        <div className="flex flex-col gap-1 p-4 rounded-2xl bg-background/40 border border-border/30 backdrop-blur-md hover:bg-background/50 transition-colors">
             <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{label}</span>
             <span className={cn("text-2xl font-bold font-mono tracking-tight", color || "text-foreground")}>{value}</span>
             {subtext && <span className="text-[10px] text-muted-foreground/80">{subtext}</span>}
@@ -198,7 +273,7 @@ function VitalRow({ label, value, status }: { label: string, value: string, stat
         neutral: "text-foreground"
     }
     return (
-        <div className="flex justify-between items-center p-3 rounded-xl bg-background/20">
+        <div className="flex justify-between items-center p-3 rounded-xl bg-background/20 hover:bg-background/30 transition-colors">
             <span className="text-sm text-muted-foreground">{label}</span>
             <span className={cn("font-mono font-bold", colors[status])}>{value}</span>
         </div>
@@ -206,9 +281,6 @@ function VitalRow({ label, value, status }: { label: string, value: string, stat
 }
 
 function Gauge({ value, min, max }: { value: number, min: number, max: number }) {
-    // Normalizing -1 to 1 -> 0 to 100
-    // value is from -1 (Strong Sell) to 1 (Strong Buy)
-    // We want a semi-circle gauge
     const percent = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
 
     return (
@@ -218,7 +290,7 @@ function Gauge({ value, min, max }: { value: number, min: number, max: number })
                 style={{
                     clipPath: 'inset(0 0 50% 0)',
                     borderTopColor: getRatingColor(value),
-                    borderRightColor: getRatingColor(value), // Simple solid color for now
+                    borderRightColor: getRatingColor(value),
                     transform: `rotate(${percent * 1.8 - 180}deg)`,
                     transition: 'transform 1s ease-out'
                 }}>
@@ -237,22 +309,22 @@ function getRatingColor(val: number) {
 }
 
 function getRatingText(val: number) {
-    if (val > 0.5) return "Strong Buy"
-    if (val > 0.1) return "Buy"
-    if (val < -0.5) return "Strong Sell"
-    if (val < -0.1) return "Sell"
-    return "Neutral"
+    if (val > 0.5) return "💪 強力買進"
+    if (val > 0.1) return "💰 買進"
+    if (val < -0.5) return "📉 強力賣出"
+    if (val < -0.1) return "💸 賣出"
+    return "😐 觀望 / 中立"
 }
 
 function getRsiStatus(val: number): "good" | "bad" | "warning" | "neutral" {
     if (val > 70) return "warning" // Overbought
-    if (val < 30) return "good" // Oversold (Buy opp?)
+    if (val < 30) return "good" // Oversold
     return "neutral"
 }
 
 function formatMarketCap(value: number): string {
-    if (value >= 1e12) return (value / 1e12).toFixed(2) + "T"
-    if (value >= 1e9) return (value / 1e9).toFixed(2) + "B"
-    if (value >= 1e6) return (value / 1e6).toFixed(2) + "M"
+    if (value >= 1e12) return (value / 1e12).toFixed(2) + "兆"
+    if (value >= 1e9) return (value / 1e9).toFixed(2) + "0億" // 1B = 10億
+    if (value >= 1e6) return (value / 1e6).toFixed(2) + "百萬"
     return value.toLocaleString()
 }
