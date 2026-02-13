@@ -35,7 +35,13 @@ TW_STOCK_NAMES = {
     "2207": "和泰車", "2201": "裕隆", "2610": "華航", "2618": "長榮航", "2723": "美食-KY",
     "2727": "王品", "2707": "晶華", "9904": "寶成", "9914": "美利達", "1504": "東元",
     "1513": "中興電", "1519": "華城", "1605": "華新", "1907": "永豐餘",
-    "2344": "華邦電", "2408": "南亞科", "3035": "智原", "2337": "旺宏", "2363": "矽統"
+    "2344": "華邦電", "2408": "南亞科", "3035": "智原", "2337": "旺宏", "2363": "矽統",
+    "2449": "京元電子", "6239": "力成", "2312": "金寶", "2323": "中環", "2367": "燿華",
+    "2368": "金像電", "2401": "凌陽", "2402": "毅嘉", "2436": "偉詮電", "2451": "創見",
+    "2458": "義隆", "2481": "強茂", "3006": "晶豪科", "3016": "嘉晶", "3030": "德律",
+    "3576": "聯合再生", "3583": "辛耘", "3682": "泛亞電", "4919": "新唐", "5388": "中磊",
+    "5434": "崇越", "6116": "彩晶", "6213": "聯茂", "6271": "同欣電", "8016": "矽創",
+    "8046": "南電", "8081": "致新", "8150": "南茂"
 }
 
 db_pool = None
@@ -196,8 +202,8 @@ def fetch_from_yfinance(symbol):
                 {"subject": "趨勢 (Trend)", "A": 65, "fullMark": 100},
                 {"subject": "關注 (Attention)", "A": 50, "fullMark": 100},
             ],
-            "sector": info.get('sector', 'N/A'),
-            "industry": info.get('industry', 'N/A'),
+            "sector": info.get('sector', '-'),
+            "industry": info.get('industry', '-'),
             "updatedAt": "yfinance fallback",
             "source": "yfinance"
         }
@@ -414,6 +420,7 @@ class handler(BaseHTTPRequestHandler):
                 StockField.NAME, StockField.DESCRIPTION, StockField.PRICE, 
                 StockField.CHANGE, StockField.CHANGE_PERCENT, StockField.VOLUME,
                 StockField.MARKET_CAPITALIZATION, StockField.SECTOR, StockField.INDUSTRY,
+                StockField.EXCHANGE,
                 StockField.RELATIVE_VOLUME, StockField.CHAIKIN_MONEY_FLOW_20,
                 StockField.VOLUME_WEIGHTED_AVERAGE_PRICE, StockField.TECHNICAL_RATING,
                 StockField.AVERAGE_TRUE_RANGE_14, StockField.RELATIVE_STRENGTH_INDEX_14,
@@ -428,44 +435,74 @@ class handler(BaseHTTPRequestHandler):
             )
 
             if symbol.isdigit():
+                 # For Taiwanese stock numbers, try exact match on name
                  ss.add_filter(tvs.StockField.NAME, tvs.FilterOperator.EQUAL, symbol)
             elif not is_chinese:
                  ss.add_filter(tvs.StockField.NAME, tvs.FilterOperator.MATCH, symbol)
             
+            # If no filters resulted in matches, we might need a broader search or better handling
             df = ss.get()
+            
+            # SECOND CHANCE: If empty and is TAIWAN, try searching for the symbol without filters first if possible
+            if df.empty and not is_us_stock:
+                print(f"Empty results for {symbol} with filter, trying broader search...")
+                ss = StockScreener()
+                ss.set_markets(tvs.Market.TAIWAN)
+                df = ss.get() # Get all and filter locally
+            
             result = None
             if not df.empty:
-                # tvscreener library often uses 'Symbol' for the ticker column
-                symbol_col = 'Symbol' if 'Symbol' in df.columns else 'Name'
+                # Local search - check Symbol, Name, or Description
+                # Symbol col can be 'Symbol', 'Name', or even others depending on tvscreener version
+                search_cols = [c for c in df.columns if c in ['Symbol', 'Description', 'Name', 'Ticker']]
                 
-                # Local exact match filter
-                mask = df[symbol_col] == symbol
+                # Broadly find anything that contains the symbol string locally
+                # This helps if 'Equal' filter was too strict
+                mask = pd.Series(False, index=df.index)
+                for col in search_cols:
+                    mask |= df[col].astype(str).str.contains(symbol, case=False, na=False)
+                
                 if mask.any():
                     result = df[mask]
                 else:
-                    # Fallback for Chinese names or other matches in Description
-                    mask = df['Description'].str.contains(symbol, case=False, na=False)
-                    if mask.any():
-                        result = df[mask]
+                    # Final attempt local match in name/desc
+                    result = df
+            
+            # Use Description as fallback name, but prioritize TW_STOCK_NAMES
+            if result is not None and not result.empty:
+                data = result.iloc[0].to_dict()
+                ticker_keys = ['Symbol', 'Ticker', 'Name']
+                ticker = symbol # default fallback
+                for k in ticker_keys:
+                    if k in data and data[k] and str(data[k]).strip():
+                        ticker = str(data[k]).split(':')[-1] # Remove exchange prefix if exists
+                        break
+                
+                raw_name = data.get('Description', data.get('Name', ''))
+                display_name = TW_STOCK_NAMES.get(ticker, raw_name)
+                
+                # If still English description for TW stock, try to force it via mapping
+                if not is_us_stock and ticker in TW_STOCK_NAMES:
+                    display_name = TW_STOCK_NAMES[ticker]
+            else:
+                ticker = symbol
+                display_name = TW_STOCK_NAMES.get(ticker, symbol)
 
             # FALLBACK TO YFINANCE
             if result is None or result.empty:
                 print(f"No match in tvscreener for {symbol}, trying yfinance...")
                 yf_data = fetch_from_yfinance(symbol) # Helper below
                 if yf_data:
+                    # IMPORTANT: Force name override even for yfinance
+                    if not is_us_stock and symbol in TW_STOCK_NAMES:
+                         yf_data['name'] = TW_STOCK_NAMES[symbol]
+                    
                     self._save_to_cache(symbol, yf_data)
                     self.wfile.write(json.dumps(yf_data, default=str).encode('utf-8'))
                     return
                 else:
                     self.wfile.write(json.dumps({"error": f"Symbol '{symbol}' not found"}).encode('utf-8'))
                     return
-            
-            # 4. Map & Analyze
-            data = result.iloc[0].to_dict()
-            symbol_col = 'Symbol' if 'Symbol' in data else 'Name'
-            ticker = data.get(symbol_col, symbol)
-            raw_name = data.get('Description', '')
-            display_name = TW_STOCK_NAMES.get(ticker, raw_name) if not is_us_stock else raw_name
             
             price = data.get('Price', 0)
             target_price = data.get('Target Price (Average)', 0)
@@ -486,28 +523,36 @@ class handler(BaseHTTPRequestHandler):
             if price > vwap: smc_score += 20
             if tech_rating > 0: smc_score += 20
 
+            def get_field(data_row, field_options, default=0):
+                for opt in field_options:
+                    if opt in data_row and data_row[opt] is not None:
+                        val = data_row[opt]
+                        if isinstance(val, float) and math.isnan(val): continue
+                        return val
+                return default
+
             response_data = {
                 "symbol": ticker,
                 "name": display_name,
                 "price": price,
-                "change": data.get('Change', 0),
-                "changePercent": data.get('Change %', 0),
-                "volume": data.get('Volume', 0),
-                "marketCap": data.get('Market Capitalization', 0),
+                "change": get_field(data, ['Change'], 0),
+                "changePercent": get_field(data, ['Change %'], 0),
+                "volume": get_field(data, ['Volume'], 0),
+                "marketCap": get_field(data, ['Market Capitalization'], 0),
                 "updatedAt": "Just now",
                 "rvol": rvol, "cmf": cmf, "vwap": vwap,
                 "technicalRating": tech_rating, 
-                "analystRating": data.get('Analyst Rating', 3), 
+                "analystRating": get_field(data, ['Analyst Rating'], 3), 
                 "targetPrice": target_price,
-                "rsi": data.get('Relative Strength Index (14)', 50),
+                "rsi": get_field(data, ['Relative Strength Index (14)'], 50),
                 "atr_p": atr,
-                "sma20": data.get('Simple Moving Average (20)', 0),
-                "sma50": data.get('Simple Moving Average (50)', 0),
-                "sma200": data.get('Simple Moving Average (200)', 0),
-                "perf_w": data.get('Weekly Performance', 0),
-                "perf_m": data.get('Monthly Performance', 0),
-                "perf_ytd": data.get('YTD Performance', 0),
-                "volatility": data.get('Volatility', 0),
+                "sma20": get_field(data, ['Simple Moving Average (20)'], 0),
+                "sma50": get_field(data, ['Simple Moving Average (50)'], 0),
+                "sma200": get_field(data, ['Simple Moving Average (200)'], 0),
+                "perf_w": get_field(data, ['Weekly Performance'], 0),
+                "perf_m": get_field(data, ['Monthly Performance'], 0),
+                "perf_ytd": get_field(data, ['YTD Performance'], 0),
+                "volatility": get_field(data, ['Volatility'], 0),
                 "smcScore": smc_score,
                 "prediction": {
                      "confidence": "高" if atr < 2 else "中",
@@ -516,24 +561,25 @@ class handler(BaseHTTPRequestHandler):
                      "days": 3
                 },
                 "radarData": [
-                    {"subject": "動能", "A": data.get('Relative Strength Index (14)', 50), "fullMark": 100},
+                    {"subject": "動能", "A": get_field(data, ['Relative Strength Index (14)'], 50), "fullMark": 100},
                     {"subject": "趨勢", "A": (tech_rating + 1) * 50, "fullMark": 100},
                     {"subject": "關注", "A": min(100, rvol * 33), "fullMark": 100},
                     {"subject": "安全", "A": max(0, 100 - atr*10), "fullMark": 100},
-                    {"subject": "價值", "A": (5 - data.get('Analyst Rating', 3)) * 25, "fullMark": 100}
+                    {"subject": "價值", "A": (5 - get_field(data, ['Analyst Rating'], 3)) * 25, "fullMark": 100}
                 ],
-                "sector": data.get('Sector', 'N/A'),
-                "industry": data.get('Industry', 'N/A'),
-                "fScore": data.get('Piotroski F-score', 0),
-                "zScore": data.get('Altman Z-score', 0),
-                "grossMargin": data.get('Gross Margin', 0),
-                "netMargin": data.get('Net Margin', 0),
-                "operatingMargin": data.get('Operating Margin', 0),
-                "epsGrowth": data.get('EPS Diluted (TTM YoY Growth)', 0),
-                "revGrowth": data.get('Revenue (TTM YoY Growth)', 0),
-                "peRatio": data.get('Price to Earnings Ratio', 0),
-                "pegRatio": data.get('PEG Ratio', 0),
-                "grahamNumber": data.get("Graham's Number", 0)
+                "sector": get_field(data, ['Sector'], '-'),
+                "industry": get_field(data, ['Industry', 'Industry/Sector'], '-'),
+                "exchange": get_field(data, ['Exchange'], ticker.isdigit() and ticker.startswith('2') and 'TWSE' or '-'),
+                "fScore": get_field(data, ['Piotroski F-score', 'Piotroski F-Score (TTM)', 'piotroski_f_score_ttm'], 0),
+                "zScore": get_field(data, ['Altman Z-score', 'Altman Z-Score (TTM)', 'altman_z_score_ttm'], 0),
+                "grossMargin": get_field(data, ['Gross Margin %', 'Gross Margin', 'Gross Margin (TTM)', 'gross_margin_ttm'], 0),
+                "netMargin": get_field(data, ['Net Margin %', 'Net Margin', 'Net Margin (TTM)', 'net_margin_ttm'], 0),
+                "operatingMargin": get_field(data, ['Operating Margin %', 'Operating Margin', 'Operating Margin (TTM)', 'operating_margin_ttm'], 0),
+                "epsGrowth": get_field(data, ['EPS Diluted (TTM YoY Growth)', 'EPS Diluted (TTM YoY Growth) %', 'eps_diluted_ttm_yoy_growth'], 0),
+                "revGrowth": get_field(data, ['Revenue (TTM YoY Growth)', 'Revenue (TTM YoY Growth) %', 'revenue_ttm_yoy_growth'], 0),
+                "peRatio": get_field(data, ['Price to Earnings Ratio', 'Price to Earnings Ratio (TTM)', 'price_to_earnings_ratio_ttm'], 0),
+                "pegRatio": get_field(data, ['PEG Ratio', 'PEG Ratio (TTM)', 'price_earnings_growth_ttm'], 0),
+                "grahamNumber": get_field(data, ["Graham's Number", "Graham Number", 'graham_numbers_ttm'], 0)
             }
             
             # Sanitization

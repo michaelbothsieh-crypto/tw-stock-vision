@@ -246,7 +246,7 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-800 text-zinc-400 border border-zinc-700">
                                     {EXCHANGE_TRANSLATIONS[data.exchange] || data.exchange}
                                 </span>
-                                {data.sector && data.sector !== 'N/A' && (
+                                {data.sector && data.sector !== '-' && (
                                     <span className="px-3 py-0.5 rounded-full text-xs bg-zinc-800/50 text-zinc-400 border border-zinc-700/50">
                                         {SECTOR_TRANSLATIONS[data.sector] || data.sector}
                                     </span>

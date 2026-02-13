@@ -32,6 +32,7 @@ export interface StockData {
     radarData?: any[]
     sector: string
     industry: string
+    exchange: string
     fScore: number
     zScore: number
     grossMargin: number

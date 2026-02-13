@@ -99,7 +99,7 @@ export function HealthCheck({ data }: HealthCheckProps) {
                                         </TooltipProvider>
                                     </div>
                                     <span className={cn("font-mono font-bold text-xl", getZScoreColor(data.zScore))}>
-                                        {data.zScore > 0 ? data.zScore.toFixed(2) : "N/A"}
+                                        {data.zScore > 0 ? data.zScore.toFixed(2) : "-"}
                                     </span>
                                 </div>
                                 <p className="text-[10px] text-zinc-500 text-right italic">
@@ -121,16 +121,16 @@ export function HealthCheck({ data }: HealthCheckProps) {
                     <div className="space-y-4 py-2">
                         <div className="flex justify-between items-center border-b border-white/5 pb-2">
                             <span className="text-sm text-zinc-400">毛利率 (Gross)</span>
-                            <span className="font-mono font-bold text-lg">{data.grossMargin !== undefined && data.grossMargin !== null ? data.grossMargin.toFixed(1) + "%" : "N/A"}</span>
+                            <span className="font-mono font-bold text-lg">{data.grossMargin !== undefined && data.grossMargin !== null && data.grossMargin !== 0 ? data.grossMargin.toFixed(1) + "%" : "-"}</span>
                         </div>
                         <div className="flex justify-between items-center border-b border-white/5 pb-2">
                             <span className="text-sm text-zinc-400">營益率 (Operating)</span>
-                            <span className="font-mono font-bold text-lg">{data.operatingMargin !== undefined && data.operatingMargin !== null ? data.operatingMargin.toFixed(1) + "%" : "N/A"}</span>
+                            <span className="font-mono font-bold text-lg">{data.operatingMargin !== undefined && data.operatingMargin !== null && data.operatingMargin !== 0 ? data.operatingMargin.toFixed(1) + "%" : "-"}</span>
                         </div>
                         <div className="flex justify-between items-center pb-2">
                             <span className="text-sm text-zinc-400">淨利率 (Net)</span>
                             <span className={cn("font-mono font-bold text-lg", (data.netMargin || 0) > 0 ? "text-emerald-400" : "text-rose-400")}>
-                                {data.netMargin !== undefined && data.netMargin !== null ? data.netMargin.toFixed(1) + "%" : "N/A"}
+                                {data.netMargin !== undefined && data.netMargin !== null && data.netMargin !== 0 ? data.netMargin.toFixed(1) + "%" : "-"}
                             </span>
                         </div>
                     </div>
@@ -157,14 +157,14 @@ export function HealthCheck({ data }: HealthCheckProps) {
                     <div className="grid grid-cols-2 gap-4 text-center border-t border-white/5 pt-4">
                         <div>
                             <div className="text-[10px] text-zinc-500 uppercase mb-1">P/E Ratio</div>
-                            <div className="font-mono font-bold text-base text-zinc-300">{data.peRatio > 0 ? data.peRatio.toFixed(1) : "N/A"}</div>
+                            <div className="font-mono font-bold text-base text-zinc-300">{data.peRatio > 0 ? data.peRatio.toFixed(1) : "-"}</div>
                         </div>
                         <div>
                             <div className="text-[10px] text-zinc-500 uppercase mb-1">PEG Ratio</div>
                             <div className={cn("font-mono font-bold text-base",
                                 data.pegRatio > 0 && data.pegRatio < 1 ? "text-emerald-400" :
                                     data.pegRatio > 1.5 ? "text-rose-400" : "text-zinc-300"
-                            )}>{data.pegRatio > 0 ? data.pegRatio.toFixed(2) : "N/A"}</div>
+                            )}>{data.pegRatio > 0 ? data.pegRatio.toFixed(2) : "-"}</div>
                         </div>
                     </div>
                 </div>
