@@ -660,13 +660,23 @@ class handler(BaseHTTPRequestHandler):
                 "grahamNumber": graham_number
             }
             
-            # Sanitization (Only for float issues, keep None for missing targets)
-            for k, v in response_data.items():
-                if v is not None and isinstance(v, (float, int)) and math.isnan(float(v)) if isinstance(v, float) else False:
-                    response_data[k] = 0
+            # Deep Sanitization for JSON serialization (handles nan/inf)
+            def sanitize_json(obj):
+                if isinstance(obj, dict):
+                    return {k: sanitize_json(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [sanitize_json(i) for i in obj]
+                elif isinstance(obj, float):
+                    if math.isnan(obj) or math.isinf(obj):
+                        return 0
+                    return obj
+                return obj
 
-            self._save_to_cache(symbol, response_data)
-            self.wfile.write(json.dumps(response_data, default=str).encode('utf-8'))
+            safe_response = sanitize_json(response_data)
+
+            # Save and Respond
+            self._save_to_cache(symbol, safe_response)
+            self.wfile.write(json.dumps(safe_response, default=str).encode('utf-8'))
 
         except Exception as e:
             print(f"Lookup Error: {e}")
