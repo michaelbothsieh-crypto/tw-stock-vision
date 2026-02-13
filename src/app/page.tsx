@@ -34,6 +34,26 @@ export default function Home() {
         }
     }
 
+    // Auto-fetch 2330 on mount
+    useEffect(() => {
+        setQuery("2330")
+        const fetchInitial = async () => {
+            setLoading(true)
+            try {
+                const res = await fetch(`http://127.0.0.1:8000?symbol=2330`)
+                if (!res.ok) throw new Error("API Error")
+                const data = await res.json()
+                if (data.error) throw new Error(data.error)
+                setStockData(data)
+            } catch (err) {
+                console.error("Initial fetch failed", err)
+            } finally {
+                setLoading(false)
+            }
+        }
+        fetchInitial()
+    }, [])
+
     return (
         <main className="min-h-screen bg-black text-white selection:bg-primary selection:text-primary-foreground">
 
