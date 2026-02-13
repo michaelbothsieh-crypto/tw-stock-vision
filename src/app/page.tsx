@@ -52,8 +52,8 @@ export default function Home() {
 
                 {/* Search Bar */}
                 <form onSubmit={searchStock} className="relative max-w-2xl mx-auto mb-16 group">
-                    <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                    <div className="relative flex items-center">
+                    <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                    <div className="relative z-10 flex items-center">
                         <input
                             type="text"
                             value={query}
