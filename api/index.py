@@ -11,8 +11,8 @@ import yfinance as yf
 from datetime import datetime, timedelta
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import pandas as pd
 from dotenv import load_dotenv
-
 load_dotenv()
 
 # Simple mapping for popular TW stocks to Chinese names
@@ -643,7 +643,9 @@ class handler(BaseHTTPRequestHandler):
             """, (symbol, json.dumps(response_data, default=str)))
             conn.commit()
             cur.close()
-        except: pass
+        except Exception as e:
+            print(f"Cache Write Error for {symbol}: {e}")
+            if conn: conn.rollback()
         finally: return_db_connection(conn)
 
     def do_GET(self):

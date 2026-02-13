@@ -1,0 +1,5 @@
+Initializing Database...
+Database connection pool created.
+Starting local API server on http://0.0.0.0:8000
+GET Request: /api/stock?symbol=2330.TW
+Stock Lookup: 2330.TW -> Cleaned: 2330
