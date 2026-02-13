@@ -3,3 +3,10 @@ Database connection pool created.
 Starting local API server on http://0.0.0.0:8000
 GET Request: /api/stock?symbol=2330.TW
 Stock Lookup: 2330.TW -> Cleaned: 2330
+Registering user: TestUser (00000000-0000-0000-0000-000000000001)
+GET Request: /?leaderboard=trueGET Request: /?symbol=2330
+
+Stock Lookup: 2330 -> Cleaned: 2330
+Global GET Error: trying to put unkeyed connection
+GET Request: /api/stock?symbol=2330
+Stock Lookup: 2330 -> Cleaned: 2330

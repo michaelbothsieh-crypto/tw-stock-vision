@@ -217,8 +217,46 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
 
     if (!data) {
         return (
-            <div className="flex h-64 items-center justify-center text-muted-foreground">
-                輸入股票代號以查看數據
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                <div className="text-center py-12 rounded-3xl border border-dashed border-zinc-800 bg-zinc-900/20">
+                    <div className="text-5xl mb-4">🔍</div>
+                    <h3 className="text-xl font-bold mb-2">開始您的數據洞察</h3>
+                    <p className="text-zinc-500 max-w-sm mx-auto text-sm">
+                        在上方輸入股票代號（如 2330.TW 或 TSLA）<br />
+                        獲取 AI 驅動的技術面與基本面分析。
+                    </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="p-6 rounded-3xl bg-zinc-900/50 border border-zinc-800 space-y-3">
+                        <div className="text-2xl">📊</div>
+                        <h4 className="font-bold">SMC 籌碼洞察</h4>
+                        <p className="text-xs text-zinc-500 leading-relaxed">
+                            偵測異常爆量 (RVOL) 與資金流向 (CMF)，追蹤機構法人成本線 (VWAP)，捕捉主力腳步。
+                        </p>
+                    </div>
+                    <div className="p-6 rounded-3xl bg-zinc-900/50 border border-zinc-800 space-y-3">
+                        <div className="text-2xl">🩺</div>
+                        <h4 className="font-bold">每日健檢 (Daily Vitals)</h4>
+                        <p className="text-xs text-zinc-500 leading-relaxed">
+                            秒懂 20/50/200MA 均線排列趨勢，並透過 RSI 與 ATR 進行風險與波動度控管。
+                        </p>
+                    </div>
+                    <div className="p-6 rounded-3xl bg-zinc-900/50 border border-zinc-800 space-y-3">
+                        <div className="text-2xl">⚡</div>
+                        <h4 className="font-bold">AI 戰力評級</h4>
+                        <p className="text-xs text-zinc-500 leading-relaxed">
+                            五大維度（動能、趨勢、關注、安全、價值）綜合評等，給予明確的技術面建議與目標價參考。
+                        </p>
+                    </div>
+                    <div className="p-6 rounded-3xl bg-zinc-900/50 border border-zinc-800 space-y-3">
+                        <div className="text-2xl">💰</div>
+                        <h4 className="font-bold">財務健康分析</h4>
+                        <p className="text-xs text-zinc-500 leading-relaxed">
+                            解析毛利/淨利率與 F-Score 體質評分，配合葛拉漢指數判斷股價是否被低估。
+                        </p>
+                    </div>
+                </div>
             </div>
         )
     }
@@ -322,7 +360,7 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="text-lg font-semibold flex items-center gap-2">🎯 目標價與評級</h3>
                             <span className={cn("px-2 py-0.5 rounded text-xs", (data.targetPrice || 0) > data.price ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-500/20")}>
-                                {(((data.targetPrice || 0) - data.price) / data.price * 100).toFixed(1)}% Upside
+                                {data.targetPrice ? `${(((data.targetPrice) - data.price) / data.price * 100).toFixed(1)}% Upside` : "- % Upside"}
                             </span>
                         </div>
                         <div className="flex items-center justify-between gap-4">

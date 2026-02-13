@@ -1,1 +1,5 @@
 127.0.0.1 - - [13/Feb/2026 21:57:17] "GET /api/stock?symbol=2330.TW HTTP/1.1" 200 -
+127.0.0.1 - - [13/Feb/2026 21:58:37] "POST /api/index HTTP/1.1" 200 -
+127.0.0.1 - - [13/Feb/2026 21:58:44] "GET /?leaderboard=true HTTP/1.1" 200 -
+127.0.0.1 - - [13/Feb/2026 21:58:50] "GET /?symbol=2330 HTTP/1.1" 200 -
+127.0.0.1 - - [13/Feb/2026 22:03:02] "GET /api/stock?symbol=2330 HTTP/1.1" 200 -

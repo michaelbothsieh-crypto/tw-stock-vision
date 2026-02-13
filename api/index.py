@@ -552,6 +552,8 @@ class handler(BaseHTTPRequestHandler):
             vwap = data.get('Volume Weighted Average Price', 0)
             tech_rating = data.get('Technical Rating', 0)
             atr = data.get('Average True Range (14)', 2)
+            rsi = get_field(data, ['Relative Strength Index (14)'], 50)
+            analyst_rating = get_field(data, ['Analyst Rating'], 3)
             
             smc_score = 0
             if rvol > 1.5: smc_score += 30
@@ -559,13 +561,36 @@ class handler(BaseHTTPRequestHandler):
             if price > vwap: smc_score += 20
             if tech_rating > 0: smc_score += 20
 
-            def get_field(data_row, field_options, default=0):
-                for opt in field_options:
-                    if opt in data_row and data_row[opt] is not None:
-                        val = data_row[opt]
-                        if isinstance(val, float) and math.isnan(val): continue
-                        return val
-                return default
+            def get_radar_desc(subject, score):
+                if subject == "動能":
+                    if score > 70: return "多頭動能強勁"
+                    if score < 30: return "動能低迷"
+                    return "動能中性"
+                if subject == "趨勢":
+                    if score > 70: return "趨勢向上"
+                    if score < 30: return "趨勢偏空"
+                    return "盤整格局"
+                if subject == "關注":
+                    if score > 60: return "主力介入明顯"
+                    return "量能平淡"
+                if subject == "安全":
+                    if score > 70: return "波段波動可控"
+                    return "波動劇烈"
+                if subject == "價值":
+                    if score > 60: return "評價具有吸引力"
+                    return "評價稍高"
+                return ""
+
+            radar_data = [
+                {"subject": "動能", "A": rsi, "fullMark": 100},
+                {"subject": "趨勢", "A": (tech_rating + 1) * 50, "fullMark": 100},
+                {"subject": "關注", "A": min(100, rvol * 33), "fullMark": 100},
+                {"subject": "安全", "A": max(0, 100 - atr/price * 1000), "fullMark": 100},
+                {"subject": "價值", "A": (5 - analyst_rating) * 25, "fullMark": 100}
+            ]
+            
+            for item in radar_data:
+                item["desc"] = get_radar_desc(item["subject"], item["A"])
 
             response_data = {
                 "symbol": ticker,
@@ -578,9 +603,9 @@ class handler(BaseHTTPRequestHandler):
                 "updatedAt": "Just now",
                 "rvol": rvol, "cmf": cmf, "vwap": vwap,
                 "technicalRating": tech_rating, 
-                "analystRating": get_field(data, ['Analyst Rating'], 3), 
-                "targetPrice": target_price,
-                "rsi": get_field(data, ['Relative Strength Index (14)'], 50),
+                "analystRating": analyst_rating, 
+                "targetPrice": target_price if target_price > 0 else None,
+                "rsi": rsi,
                 "atr_p": atr,
                 "sma20": get_field(data, ['Simple Moving Average (20)'], 0),
                 "sma50": get_field(data, ['Simple Moving Average (50)'], 0),
@@ -591,18 +616,12 @@ class handler(BaseHTTPRequestHandler):
                 "volatility": get_field(data, ['Volatility'], 0),
                 "smcScore": smc_score,
                 "prediction": {
-                     "confidence": "高" if atr < 2 else "中",
-                     "upper": price * (1 + (atr/100 * 3)),
-                     "lower": price * (1 - (atr/100 * 3)),
+                     "confidence": "高" if atr/price < 0.02 else "中",
+                     "upper": price + (atr * 2.5),
+                     "lower": price - (atr * 2.5),
                      "days": 3
                 },
-                "radarData": [
-                    {"subject": "動能", "A": get_field(data, ['Relative Strength Index (14)'], 50), "fullMark": 100},
-                    {"subject": "趨勢", "A": (tech_rating + 1) * 50, "fullMark": 100},
-                    {"subject": "關注", "A": min(100, rvol * 33), "fullMark": 100},
-                    {"subject": "安全", "A": max(0, 100 - atr*10), "fullMark": 100},
-                    {"subject": "價值", "A": (5 - get_field(data, ['Analyst Rating'], 3)) * 25, "fullMark": 100}
-                ],
+                "radarData": radar_data,
                 "sector": get_field(data, ['Sector'], '-'),
                 "industry": get_field(data, ['Industry', 'Industry/Sector'], '-'),
                 "exchange": get_field(data, ['Exchange'], ticker.isdigit() and ticker.startswith('2') and 'TWSE' or '-'),
@@ -618,9 +637,9 @@ class handler(BaseHTTPRequestHandler):
                 "grahamNumber": get_field(data, ["Graham's Number", "Graham Number", 'graham_numbers_ttm'], 0)
             }
             
-            # Sanitization
+            # Sanitization (Only for float issues, keep None for missing targets)
             for k, v in response_data.items():
-                if v is None or (isinstance(v, float) and math.isnan(v)):
+                if v is not None and isinstance(v, float) and math.isnan(v):
                     response_data[k] = 0
 
             self._save_to_cache(symbol, response_data)

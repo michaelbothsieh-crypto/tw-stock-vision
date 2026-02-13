@@ -61,13 +61,19 @@ export default function Home() {
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"></div>
 
             <div className="container mx-auto px-4 py-12 max-w-5xl relative">
-                <header className="mb-12 text-center space-y-4">
+                <header className="mb-12 text-center space-y-6">
                     <h1 className="text-5xl md:text-7xl font-extrabold tracking-tighter bg-gradient-to-br from-white to-zinc-500 bg-clip-text text-transparent">
                         TwStock<span className="text-primary glow-text">Vision</span>
                     </h1>
-                    <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
-                        AI 驅動的台股/美股視覺化分析儀表板
-                    </p>
+                    <div className="max-w-2xl mx-auto space-y-2">
+                        <p className="text-zinc-300 text-lg font-medium">
+                            AI 驅動的台股/美股視覺化分析儀表板
+                        </p>
+                        <p className="text-zinc-500 text-sm leading-relaxed">
+                            整合 SMC 籌碼分析、技術評級與財務健檢。透過機構交易員視角，<br />
+                            捕捉主力進場訊號 (RVOL) 並監控資金流向 (CMF)。
+                        </p>
+                    </div>
                 </header>
 
                 {/* Search Bar */}

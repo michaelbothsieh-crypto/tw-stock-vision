@@ -16,6 +16,11 @@ interface HealthCheckProps {
         pegRatio: number | string
         grahamNumber: number | string
         price: number
+        sma20?: number
+        sma50?: number
+        sma200?: number
+        rsi?: number
+        atr_p?: number
     }
 }
 
@@ -60,20 +65,71 @@ export function HealthCheck({ data }: HealthCheckProps) {
 
     const valuation = getValuationStatus()
 
+    // Calculate SMA Trend Score
+    const getSmaScore = () => {
+        let score = 0
+        if (data.price > (data.sma20 || 0)) score += 33
+        if (data.price > (data.sma50 || 0)) score += 33
+        if (data.price > (data.sma200 || 0)) score += 34
+        return score
+    }
+    const smaScore = getSmaScore()
+
     return (
         <div className="rounded-3xl border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-sm">
             <h3 className="text-xl font-bold flex items-center gap-2 mb-6 text-zinc-300">
                 <Activity className="h-5 w-5 text-primary" />
-                AI 體質健檢
+                AI 數據健檢
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-                {/* 1. Financial Health (Scores) */}
+                {/* 1. Daily Vitals (SMA/RSI/ATR) */}
+                <div className="space-y-4 p-5 rounded-2xl bg-black/20 border border-white/5">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
+                            🩺 每日健檢 (Daily Vitals)
+                        </span>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div className="p-3 rounded-xl bg-zinc-900/40 border border-white/5">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] text-zinc-500 font-bold">SMA 趨勢儀</span>
+                                <span className={cn("text-[10px] font-bold", smaScore > 60 ? "text-emerald-400" : smaScore > 30 ? "text-yellow-400" : "text-rose-400")}>
+                                    {smaScore > 60 ? "偏多" : smaScore > 30 ? "中性" : "偏空"}
+                                </span>
+                            </div>
+                            <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                                <div className={cn("h-full transition-all duration-1000", smaScore > 60 ? "bg-emerald-500" : smaScore > 30 ? "bg-yellow-500" : "bg-rose-500")} style={{ width: `${smaScore}%` }} />
+                            </div>
+                            <p className="text-[9px] text-zinc-600 mt-2">秒懂短中長期 (20/50/200MA) 均線排列。</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="p-3 rounded-xl bg-zinc-900/40 border border-white/5">
+                                <span className="text-[10px] text-zinc-500 block mb-1">RSI 強弱</span>
+                                <span className={cn("text-sm font-bold", (data.rsi || 50) > 70 ? "text-rose-400" : (data.rsi || 50) < 30 ? "text-emerald-400" : "text-zinc-300")}>
+                                    {data.rsi?.toFixed(1) || "-"}
+                                </span>
+                                <p className="text-[8px] text-zinc-600 mt-1">過熱(&gt;70)或超賣(&lt;30)。</p>
+                            </div>
+                            <div className="p-3 rounded-xl bg-zinc-900/40 border border-white/5">
+                                <span className="text-[10px] text-zinc-500 block mb-1">ATR 波動</span>
+                                <span className="text-sm font-bold text-zinc-300">
+                                    ±{data.atr_p?.toFixed(2) || "-"}
+                                </span>
+                                <p className="text-[8px] text-zinc-600 mt-1">預估當日波動範圍。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 2. Financial Strength */}
                 <div className="space-y-4 p-5 rounded-2xl bg-black/20 border border-white/5 flex flex-col justify-between">
                     <div>
                         <div className="flex items-center justify-between mb-4">
-                            <span className="text-sm font-medium text-zinc-400 flex items-center gap-1">
+                            <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
                                 <ShieldCheck className="h-4 w-4" /> 財務強度
                             </span>
                         </div>
@@ -92,12 +148,12 @@ export function HealthCheck({ data }: HealthCheckProps) {
                                             </Tooltip>
                                         </TooltipProvider>
                                     </div>
-                                    <span className={cn("font-mono font-bold text-xl", getScoreColor(fScore, 9))}>
-                                        {fScore} <span className="text-xs font-normal text-zinc-600">/ 9</span>
+                                    <span className={cn("font-mono font-bold text-xl", getNum(data.fScore) > 0 ? getScoreColor(getNum(data.fScore), 9) : "text-zinc-500")}>
+                                        {getNum(data.fScore) > 0 ? getNum(data.fScore) : "-"} <span className="text-xs font-normal text-zinc-600">/ 9</span>
                                     </span>
                                 </div>
                                 <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                                    <div className={cn("h-full rounded-full transition-all duration-1000", getScoreColor(fScore, 9).replace('text-', 'bg-'))} style={{ width: `${(fScore / 9) * 100}%` }} />
+                                    <div className={cn("h-full rounded-full transition-all duration-1000", (getNum(data.fScore) > 0 ? getScoreColor(getNum(data.fScore), 9) : "bg-zinc-700").replace('text-', 'bg-'))} style={{ width: `${(getNum(data.fScore) / 9) * 100}%` }} />
                                 </div>
                             </div>
 
@@ -115,76 +171,49 @@ export function HealthCheck({ data }: HealthCheckProps) {
                                         </TooltipProvider>
                                     </div>
                                     <span className={cn("font-mono font-bold text-xl", getZScoreColor(zScore))}>
-                                        {zScore > 0 ? zScore.toFixed(2) : "-"}
+                                        {zScore > 0.1 ? zScore.toFixed(2) : "-"}
                                     </span>
                                 </div>
                                 <p className="text-[10px] text-zinc-500 text-right italic">
-                                    {zScore > 2.99 ? "財務安全" : zScore > 1.81 ? "灰色地帶" : zScore > 0 ? "財務預警" : "數據缺失"}
+                                    {zScore > 2.99 ? "財務安全" : zScore > 1.81 ? "灰色地帶" : zScore > 0.1 ? "財務預警" : "數據缺失"}
                                 </p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* 2. Profitability (Margins) */}
+                {/* 3. Valuation & Margins */}
                 <div className="space-y-4 p-5 rounded-2xl bg-black/20 border border-white/5">
                     <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-zinc-400 flex items-center gap-1">
-                            <TrendingUp className="h-4 w-4" /> 獲利能力 (TTM)
+                        <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
+                            <DollarSign className="h-4 w-4" /> 價值與獲利
                         </span>
                     </div>
 
-                    <div className="space-y-4 py-2">
-                        <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                            <span className="text-sm text-zinc-400">毛利率 (Gross)</span>
-                            <span className="font-mono font-bold text-lg">{grossMargin !== 0 ? grossMargin.toFixed(1) + "%" : "-"}</span>
+                    <div className="space-y-4">
+                        <div className="text-center py-2 border-b border-white/5">
+                            <div className={cn("text-xl font-bold mb-1", valuation.color)}>
+                                {valuation.text}
+                            </div>
+                            <div className="text-[9px] text-zinc-500 uppercase">
+                                葛拉漢合理價 <span className="font-mono text-zinc-400">{grahamNumber > 1 ? `$${grahamNumber.toFixed(1)}` : "數據缺失"}</span>
+                            </div>
                         </div>
-                        <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                            <span className="text-sm text-zinc-400">營益率 (Operating)</span>
-                            <span className="font-mono font-bold text-lg">{operatingMargin !== 0 ? operatingMargin.toFixed(1) + "%" : "-"}</span>
-                        </div>
-                        <div className="flex justify-between items-center pb-2">
-                            <span className="text-sm text-zinc-400">淨利率 (Net)</span>
-                            <span className={cn("font-mono font-bold text-lg", (netMargin || 0) > 0 ? "text-emerald-400" : "text-rose-400")}>
-                                {netMargin !== 0 ? netMargin.toFixed(1) + "%" : "-"}
-                            </span>
+
+                        <div className="grid grid-cols-2 gap-2 text-center">
+                            <div className="p-2">
+                                <div className="text-[9px] text-zinc-500 uppercase">毛利率</div>
+                                <div className="font-mono font-bold text-xs">{grossMargin !== 0 ? grossMargin.toFixed(1) + "%" : "-"}</div>
+                            </div>
+                            <div className="p-2">
+                                <div className="text-[9px] text-zinc-500 uppercase">淨利率</div>
+                                <div className={cn("font-mono font-bold text-xs", netMargin > 0 ? "text-emerald-400" : "text-rose-400")}>
+                                    {netMargin !== 0 ? netMargin.toFixed(1) + "%" : "-"}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-
-                {/* 3. Valuation (Graham & PEG) */}
-                <div className="space-y-4 p-5 rounded-2xl bg-black/20 border border-white/5">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-zinc-400 flex items-center gap-1">
-                            <DollarSign className="h-4 w-4" /> 價值評估
-                        </span>
-                    </div>
-
-                    <div className="text-center py-4">
-                        <div className={cn("text-3xl font-bold mb-2 tracking-tight", valuation.color)}>
-                            {valuation.text}
-                        </div>
-                        <div className="text-[10px] text-zinc-500 uppercase leading-relaxed text-balance px-2">
-                            目前股價 vs 葛拉漢合理價 <br />
-                            <span className="font-mono text-zinc-400 text-xs">{grahamNumber > 0 ? `$${grahamNumber.toFixed(1)}` : "數據暫缺"}</span>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 text-center border-t border-white/5 pt-4">
-                        <div>
-                            <div className="text-[10px] text-zinc-500 uppercase mb-1">P/E Ratio</div>
-                            <div className="font-mono font-bold text-base text-zinc-300">{peRatio > 0 ? peRatio.toFixed(1) : "-"}</div>
-                        </div>
-                        <div>
-                            <div className="text-[10px] text-zinc-500 uppercase mb-1">PEG Ratio</div>
-                            <div className={cn("font-mono font-bold text-base",
-                                pegRatio > 0 && pegRatio < 1 ? "text-emerald-400" :
-                                    pegRatio > 1.5 ? "text-rose-400" : "text-zinc-300"
-                            )}>{pegRatio > 0 ? pegRatio.toFixed(2) : "-"}</div>
-                        </div>
-                    </div>
-                </div>
-
             </div>
         </div>
     )
