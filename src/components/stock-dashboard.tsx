@@ -62,7 +62,7 @@ const InfoTooltip = ({ content }: { content: string }) => (
 export function StockDashboard({ data, loading, error }: StockDashboardProps) {
     const { user, register } = useUser()
     const [adding, setAdding] = useState(false)
-    const [aiCommentString, setAiCommentString] = useState<string>("")
+    const [aiComments, setAiComments] = useState<string[]>(["分析數據中..."])
     const [showRegister, setShowRegister] = useState(false)
 
     // Helper to perform the actual API call
@@ -148,19 +148,41 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                 }, 250)
             }
 
-            // Generate Dynamic AI Comment String (Logic reused)
-            const getComment = () => {
+            // Generate Dynamic AI Comment List
+            const getComments = () => {
+                const comments: string[] = []
                 const randomChoice = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)]
-                if (data.changePercent > 5) return randomChoice(["飛向宇宙，浩瀚無垠！🚀", "這漲幅... 難道是有內線？🤫", "多軍集結，全面進攻！⚔️"])
-                if (data.changePercent < -5) return randomChoice(["這是在特價嗎？還是接刀？🔪", "別怕，這只是技術性調整... 吧？📉", "空軍大獲全勝。🥶"])
-                if (data.rsi > 75) return randomChoice(["RSI 過熱！少年股神請冷靜 🔥", "追高小心住套房！⚠️"])
-                if (data.rsi < 25) return randomChoice(["RSI 超賣！人棄我取... 嗎？💎", "恐慌殺盤，也許是買點？👀"])
-                if (data.rvol > 2.5) return randomChoice(["量能爆棚！主力在搞事？📢", "有人在偷偷吃貨？🧐"])
-                if (data.technicalRating > 0.5) return randomChoice(["技術面強勢，趨勢是你的朋友！📈", "均線多頭排列。🌊"])
-                if (data.technicalRating < -0.5) return randomChoice(["技術面疲弱，保守為上。🛡️", "型態轉空，現金為王。💰"])
-                return randomChoice(["穩健觀察中... ☕", "盤整盤，喝杯咖啡再看吧。💤", "多空交戰，方向未明。⚖️"])
+
+                // 1. Condition-based comments
+                if (data.changePercent > 5) comments.push(randomChoice(["飛向宇宙，浩瀚無垠！🚀", "這漲幅... 難道是有內線？🤫", "多軍集結，全面進攻！⚔️"]))
+                else if (data.changePercent < -5) comments.push(randomChoice(["這是在特價嗎？還是接刀？🔪", "別怕，這只是技術性調整... 吧？📉", "空軍大獲全勝。🥶"]))
+
+                if (data.rsi > 75) comments.push(randomChoice(["RSI 過熱！少年股神請冷靜 🔥", "追高小心住套房！⚠️"]))
+                else if (data.rsi < 25) comments.push(randomChoice(["RSI 超賣！人棄我取... 嗎？💎", "恐慌殺盤，也許是買點？👀"]))
+
+                if (data.rvol > 2.5) comments.push(randomChoice(["量能爆棚！主力在搞事？📢", "有人在偷偷吃貨？🧐"]))
+
+                if (data.technicalRating > 0.5) comments.push(randomChoice(["技術面強勢，趨勢是你的朋友！📈", "均線多頭排列。🌊"]))
+                else if (data.technicalRating < -0.5) comments.push(randomChoice(["技術面疲弱，保守為上。🛡️", "型態轉空，現金為王。💰"]))
+
+                // 2. Personality/Default comments to ensure variety
+                const personality = [
+                    "SMC 指標顯示主力腳步移動中... 🕵️",
+                    "數據正在即時同步，保持關注。📡",
+                    "大數據分析完成，請參考雷達圖。📊",
+                    "盤勢千變萬化，紀律才是核心。🧘"
+                ]
+
+                // Shuffle and take 2 random ones to mix with specific data comments
+                const shuffled = [...personality].sort(() => 0.5 - Math.random())
+                comments.push(...shuffled.slice(0, 2))
+
+                // Fallback if empty
+                if (comments.length === 0) return ["穩健觀察中... ☕", "盤整盤，喝杯咖啡再看吧。💤"]
+
+                return comments
             }
-            setAiCommentString(getComment())
+            setAiComments(getComments())
         }
     }, [data])
 
@@ -233,7 +255,7 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                             <span className="mr-2">🤖</span>
                             <Typewriter
                                 options={{
-                                    strings: [aiCommentString],
+                                    strings: aiComments,
                                     autoStart: true,
                                     loop: true,
                                     delay: 50,

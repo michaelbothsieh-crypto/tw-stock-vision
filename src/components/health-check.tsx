@@ -1,5 +1,6 @@
 import { motion } from "framer-motion"
-import { Activity, TrendingUp, DollarSign, ShieldCheck, AlertTriangle } from "lucide-react"
+import { Activity, TrendingUp, DollarSign, ShieldCheck, AlertTriangle, Info } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 interface HealthCheckProps {
@@ -64,7 +65,17 @@ export function HealthCheck({ data }: HealthCheckProps) {
                         <div className="space-y-4">
                             <div>
                                 <div className="flex justify-between items-center mb-1">
-                                    <span className="text-xs text-zinc-500 uppercase">Piotroski F-Score</span>
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-xs text-zinc-500 uppercase">F-Score</span>
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger><Info className="h-3 w-3 text-zinc-600" /></TooltipTrigger>
+                                                <TooltipContent className="max-w-[200px] text-[10px]">
+                                                    Piotroski F-Score：衡量獲利能力、營運效率及財務槓桿，最高 9 分，越高代表體質越強。
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    </div>
                                     <span className={cn("font-mono font-bold text-xl", getScoreColor(data.fScore, 9))}>
                                         {data.fScore} <span className="text-xs font-normal text-zinc-600">/ 9</span>
                                     </span>
@@ -76,7 +87,17 @@ export function HealthCheck({ data }: HealthCheckProps) {
 
                             <div>
                                 <div className="flex justify-between items-center mb-1">
-                                    <span className="text-xs text-zinc-500 uppercase">Altman Z-Score</span>
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-xs text-zinc-500 uppercase">Z-Score</span>
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger><Info className="h-3 w-3 text-zinc-600" /></TooltipTrigger>
+                                                <TooltipContent className="max-w-[200px] text-[10px]">
+                                                    Altman Z-Score：破產預警指標。&gt; 2.99 為安全，&lt; 1.81 為財務困窘區。
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    </div>
                                     <span className={cn("font-mono font-bold text-xl", getZScoreColor(data.zScore))}>
                                         {data.zScore > 0 ? data.zScore.toFixed(2) : "N/A"}
                                     </span>

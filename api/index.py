@@ -35,6 +35,7 @@ TW_STOCK_NAMES = {
     "2207": "和泰車", "2201": "裕隆", "2610": "華航", "2618": "長榮航", "2723": "美食-KY",
     "2727": "王品", "2707": "晶華", "9904": "寶成", "9914": "美利達", "1504": "東元",
     "1513": "中興電", "1519": "華城", "1605": "華新", "1907": "永豐餘",
+    "2344": "華邦電", "2408": "南亞科", "3035": "智原", "2337": "旺宏", "2363": "矽統"
 }
 
 db_pool = None
@@ -345,18 +346,33 @@ class handler(BaseHTTPRequestHandler):
                 symbol = symbol.encode('latin-1').decode('utf-8')
         except: pass
 
-        symbol = symbol.strip().upper()
+        symbol = symbol.strip()
         print(f"Stock Lookup: {symbol}")
         
         # 1. Reverse Lookup if Chinese name
         is_chinese = bool(re.search(r'[\u4e00-\u9fff]', symbol))
         if is_chinese:
+            found = False
+            # Exact match prioritization
             for ticker, name in TW_STOCK_NAMES.items():
-                if symbol == name or symbol in name or name in symbol:
-                    print(f"Found ticker {ticker} for Chinese name {symbol}")
+                if symbol == name:
+                    print(f"Found exact ticker {ticker} for {symbol}")
                     symbol = ticker
-                    is_chinese = False # Now we have a ticker
+                    is_chinese = False 
+                    found = True
                     break
+            
+            # Fuzzy match fallback
+            if not found:
+                for ticker, name in TW_STOCK_NAMES.items():
+                    if symbol in name or name in symbol:
+                        print(f"Found fuzzy ticker {ticker} for {symbol}")
+                        symbol = ticker
+                        is_chinese = False
+                        found = True
+                        break
+
+        symbol = symbol.upper()
 
         # 2. Check Cache
         conn = get_db_connection()
@@ -504,16 +520,16 @@ class handler(BaseHTTPRequestHandler):
                 ],
                 "sector": data.get('Sector', 'N/A'),
                 "industry": data.get('Industry', 'N/A'),
-                "fScore": data.get('Piotroski F-Score (TTM)', 0),
-                "zScore": data.get('Altman Z-Score (TTM)', 0),
-                "grossMargin": data.get('Gross Margin (TTM)', 0),
-                "netMargin": data.get('Net Margin (TTM)', 0),
-                "operatingMargin": data.get('Operating Margin (TTM)', 0),
+                "fScore": data.get('Piotroski F-score', 0),
+                "zScore": data.get('Altman Z-score', 0),
+                "grossMargin": data.get('Gross Margin', 0),
+                "netMargin": data.get('Net Margin', 0),
+                "operatingMargin": data.get('Operating Margin', 0),
                 "epsGrowth": data.get('EPS Diluted (TTM YoY Growth)', 0),
                 "revGrowth": data.get('Revenue (TTM YoY Growth)', 0),
-                "peRatio": data.get('Price to Earnings Ratio (TTM)', 0),
-                "pegRatio": data.get('PEG Ratio (TTM)', 0),
-                "grahamNumber": data.get("Graham's Number (TTM)", 0)
+                "peRatio": data.get('Price to Earnings Ratio', 0),
+                "pegRatio": data.get('PEG Ratio', 0),
+                "grahamNumber": data.get("Graham's Number", 0)
             }
             
             # Sanitization
