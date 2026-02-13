@@ -121,16 +121,16 @@ export function HealthCheck({ data }: HealthCheckProps) {
                     <div className="space-y-4 py-2">
                         <div className="flex justify-between items-center border-b border-white/5 pb-2">
                             <span className="text-sm text-zinc-400">毛利率 (Gross)</span>
-                            <span className="font-mono font-bold text-lg">{data.grossMargin > 0 ? data.grossMargin.toFixed(1) + "%" : "N/A"}</span>
+                            <span className="font-mono font-bold text-lg">{data.grossMargin !== undefined && data.grossMargin !== null ? data.grossMargin.toFixed(1) + "%" : "N/A"}</span>
                         </div>
                         <div className="flex justify-between items-center border-b border-white/5 pb-2">
                             <span className="text-sm text-zinc-400">營益率 (Operating)</span>
-                            <span className="font-mono font-bold text-lg">{data.operatingMargin > 0 ? data.operatingMargin.toFixed(1) + "%" : "N/A"}</span>
+                            <span className="font-mono font-bold text-lg">{data.operatingMargin !== undefined && data.operatingMargin !== null ? data.operatingMargin.toFixed(1) + "%" : "N/A"}</span>
                         </div>
                         <div className="flex justify-between items-center pb-2">
                             <span className="text-sm text-zinc-400">淨利率 (Net)</span>
-                            <span className={cn("font-mono font-bold text-lg", data.netMargin > 0 ? "text-emerald-400" : "text-rose-400")}>
-                                {data.netMargin !== 0 ? data.netMargin.toFixed(1) + "%" : "N/A"}
+                            <span className={cn("font-mono font-bold text-lg", (data.netMargin || 0) > 0 ? "text-emerald-400" : "text-rose-400")}>
+                                {data.netMargin !== undefined && data.netMargin !== null ? data.netMargin.toFixed(1) + "%" : "N/A"}
                             </span>
                         </div>
                     </div>
