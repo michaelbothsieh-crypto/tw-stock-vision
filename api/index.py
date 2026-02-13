@@ -444,7 +444,7 @@ class handler(BaseHTTPRequestHandler):
                     response_data = cached_row['data']
                     response_data['source'] = 'cache'
                     self._set_headers()
-                    self.wfile.write(json.dumps(response_data).encode('utf-8'))
+                    self.wfile.write(json.dumps(sanitize_json(response_data)).encode('utf-8'))
                     cur.close()
                     return_db_connection(conn)
                     return
@@ -713,7 +713,7 @@ class handler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"status": "ok", "db": db_alive}).encode('utf-8'))
             else:
                 self._set_headers()
-                self.wfile.write(json.dumps({"error": f"Invalid endpoint: {path}"}).encode('utf-8'))
+                self.wfile.write(json.dumps(sanitize_json({"error": f"Invalid endpoint: {path}"})).encode('utf-8'))
         except Exception as e:
             print(f"Global GET Error on {path}: {e}")
             import traceback

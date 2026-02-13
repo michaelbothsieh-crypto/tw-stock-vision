@@ -83,7 +83,7 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
         if (!data) return
         setAdding(true)
         try {
-            const res = await fetch('http://127.0.0.1:8000', {
+            const res = await fetch('/api/index', {
                 method: 'POST',
                 body: JSON.stringify({
                     action: 'add_portfolio',
