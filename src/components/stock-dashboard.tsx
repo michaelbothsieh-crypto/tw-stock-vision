@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import confetti from "canvas-confetti"
 import { cn } from "@/lib/utils"
+import Typewriter from 'typewriter-effect';
+import { AI_RadarChart } from "./ui/radar-chart"
 
 interface StockData {
     symbol: string
@@ -33,6 +35,15 @@ interface StockData {
     perf_ytd: number
     volatility: number
     earningsDate: number
+    // AI Data
+    smcScore: number
+    prediction?: {
+        confidence: string
+        upper: number
+        lower: number
+        days: number
+    }
+    radarData?: any[]
 }
 
 interface StockDashboardProps {
@@ -42,7 +53,7 @@ interface StockDashboardProps {
 }
 
 export function StockDashboard({ data, loading, error }: StockDashboardProps) {
-    const [aiComment, setAiComment] = useState<string>("")
+    const [aiCommentString, setAiCommentString] = useState<string>("")
 
     useEffect(() => {
         if (data) {
@@ -75,57 +86,19 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                 }, 250)
             }
 
-            // Generate Dynamic AI Comment
+            // Generate Dynamic AI Comment String (Logic reused)
             const getComment = () => {
                 const randomChoice = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)]
-
-                if (data.changePercent > 5) return randomChoice([
-                    "飛向宇宙，浩瀚無垠！🚀",
-                    "這漲幅... 難道是有內線？🤫",
-                    "多軍集結，全面進攻！⚔️",
-                    "恭喜持有的股東，今晚加菜！🍗"
-                ])
-                if (data.changePercent < -5) return randomChoice([
-                    "這是在特價嗎？還是接刀？🔪",
-                    "別怕，這只是技術性調整... 吧？📉",
-                    "該停損還是抄底？這是一個問題。🤔",
-                    "空軍大獲全勝，多軍瑟瑟發抖。🥶"
-                ])
-                if (data.rsi > 75) return randomChoice([
-                    "RSI 過熱！少年股神請冷靜 🔥",
-                    "追高小心住套房，記得設停損！⚠️",
-                    "情緒過於亢奮，隨時可能回檔。🛑"
-                ])
-                if (data.rsi < 25) return randomChoice([
-                    "RSI 超賣！人棄我取... 嗎？💎",
-                    "恐慌殺盤，也許是鑽石買點？👀",
-                    "跌無可跌，反彈在即？📈"
-                ])
-                if (data.rvol > 2.5) return randomChoice([
-                    "量能爆棚！主力在搞事？📢",
-                    "有人在偷偷吃貨，還是在倒貨？🧐",
-                    "成交量異常，必有妖孽！👻"
-                ])
-                if (data.technicalRating > 0.5) return randomChoice([
-                    "技術面強勢，趨勢是你的朋友！📈",
-                    "均線多頭排列，順勢而為。🌊",
-                    "各項指標亮紅燈，衝啊！🚦"
-                ])
-                if (data.technicalRating < -0.5) return randomChoice([
-                    "技術面疲弱，保守為上。🛡️",
-                    "型態轉空，現金為王。💰",
-                    "不要與趨勢作對，該跑就跑。🏃"
-                ])
-
-                return randomChoice([
-                    "穩健觀察中... ☕",
-                    "盤整盤，喝杯咖啡再看吧。💤",
-                    "多空交戰，方向未明。⚖️",
-                    "耐心等待出手的時機。🕰️"
-                ])
+                if (data.changePercent > 5) return randomChoice(["飛向宇宙，浩瀚無垠！🚀", "這漲幅... 難道是有內線？🤫", "多軍集結，全面進攻！⚔️"])
+                if (data.changePercent < -5) return randomChoice(["這是在特價嗎？還是接刀？🔪", "別怕，這只是技術性調整... 吧？📉", "空軍大獲全勝。🥶"])
+                if (data.rsi > 75) return randomChoice(["RSI 過熱！少年股神請冷靜 🔥", "追高小心住套房！⚠️"])
+                if (data.rsi < 25) return randomChoice(["RSI 超賣！人棄我取... 嗎？💎", "恐慌殺盤，也許是買點？👀"])
+                if (data.rvol > 2.5) return randomChoice(["量能爆棚！主力在搞事？📢", "有人在偷偷吃貨？🧐"])
+                if (data.technicalRating > 0.5) return randomChoice(["技術面強勢，趨勢是你的朋友！📈", "均線多頭排列。🌊"])
+                if (data.technicalRating < -0.5) return randomChoice(["技術面疲弱，保守為上。🛡️", "型態轉空，現金為王。💰"])
+                return randomChoice(["穩健觀察中... ☕", "盤整盤，喝杯咖啡再看吧。💤", "多空交戰，方向未明。⚖️"])
             }
-
-            setAiComment(getComment())
+            setAiCommentString(getComment())
         }
     }, [data])
 
@@ -161,8 +134,30 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
             animate={{ opacity: 1, y: 0 }}
             className="grid gap-6"
         >
+
+            {/* SMC Score Bar */}
+            <div className="rounded-2xl bg-gradient-to-r from-violet-600/20 to-indigo-600/20 p-1 border border-violet-500/30">
+                <div className="flex items-center justify-between px-4 py-2">
+                    <span className="font-bold text-violet-300 flex items-center gap-2">
+                        🧠 SMC 主力信心指數
+                    </span>
+                    <span className="text-2xl font-mono font-bold text-white shadow-glow">{data.smcScore} / 100</span>
+                </div>
+                <div className="h-2 w-full bg-black/20 rounded-full overflow-hidden mx-1 mb-1">
+                    <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${data.smcScore}%` }}
+                        transition={{ duration: 1, ease: "easeOut" }}
+                        className={cn("h-full", data.smcScore > 60 ? "bg-gradient-to-r from-violet-500 to-fuchsia-500" : "bg-zinc-500")}
+                    />
+                </div>
+            </div>
+
             {/* Header Card */}
-            <div className="rounded-3xl border border-border/50 bg-card/50 p-8 shadow-xl backdrop-blur-sm relative overflow-hidden">
+            <div className="rounded-3xl border border-border/50 bg-card/50 p-8 shadow-xl backdrop-blur-sm relative overflow-hidden group">
+                {/* Scanner Animation */}
+                <div className="absolute top-0 left-0 w-full h-[2px] bg-primary/50 shadow-[0_0_15px_3px_rgba(59,130,246,0.5)] animate-scan opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+
                 <div className="absolute top-0 right-0 p-4 opacity-10 text-9xl">
                     {isPositive ? "🐂" : "🐻"}
                 </div>
@@ -177,15 +172,18 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                         </div>
                         <p className="mt-1 text-2xl font-bold text-primary/90">{data.name || data.symbol}</p>
 
-                        {/* AI Comment Bubble */}
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            transition={{ delay: 0.5 }}
-                            className="mt-4 inline-block rounded-2xl bg-primary/10 px-4 py-2 text-primary font-medium border border-primary/20"
-                        >
-                            🤖 AI 點評: {aiComment}
-                        </motion.div>
+                        {/* Typewriter AI Comment */}
+                        <div className="mt-4 min-h-[40px] inline-flex items-center rounded-2xl bg-primary/10 px-4 py-2 text-primary font-medium border border-primary/20">
+                            <span className="mr-2">🤖</span>
+                            <Typewriter
+                                options={{
+                                    strings: [aiCommentString],
+                                    autoStart: true,
+                                    delay: 40,
+                                    cursor: '▋'
+                                }}
+                            />
+                        </div>
                     </div>
 
                     <div className={cn(
@@ -206,82 +204,81 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                 <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-5">
                     <Stat label="成交量" value={(data.volume || 0).toLocaleString()} />
                     <Stat label="市值" value={data.marketCap ? formatMarketCap(data.marketCap) : "--"} />
-                    <Stat label="相對量能 (RVOL)" value={(data.rvol || 0).toFixed(2) + "x"}
-                        subtext={(data.rvol || 0) > 1.5 ? "🔥 交易熱絡" : "正常"}
+                    <Stat label="RVOL (量能)" value={(data.rvol || 0).toFixed(2) + "x"}
+                        subtext={(data.rvol || 0) > 1.5 ? "🔥 滾燙" : "冰冷"}
                         color={(data.rvol || 0) > 1.5 ? "text-amber-400" : undefined} />
-                    <Stat label="成交量加權價 (VWAP)" value={(data.vwap || 0).toFixed(2)}
-                        subtext={data.price > (data.vwap || 0) ? "多頭強勢 > VWAP" : "空頭弱勢 < VWAP"}
+                    <Stat label="VWAP" value={(data.vwap || 0).toFixed(2)}
                         color={data.price > (data.vwap || 0) ? "text-emerald-400" : "text-rose-400"} />
-                    <Stat label="資金流向 (CMF)" value={(data.cmf || 0).toFixed(2)}
+                    <Stat label="CMF (金流)" value={(data.cmf || 0).toFixed(2)}
                         color={(data.cmf || 0) > 0 ? "text-emerald-400" : "text-rose-400"} />
                 </div>
             </div>
 
-            {/* Smart Money & Ratings Grid */}
+            {/* AI Analysis Grid */}
             <div className="grid gap-6 md:grid-cols-2">
-                {/* Ratings Card */}
-                <div className="rounded-3xl border border-border/50 bg-card/30 p-6 shadow-lg backdrop-blur-sm">
-                    <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
-                        <span className="text-2xl">⚡</span> 綜合評級 (Ratings)
-                    </h3>
-                    <div className="grid grid-cols-2 gap-8">
-                        {/* Technical Rating */}
-                        <div className="flex flex-col items-center">
-                            <Gauge value={data.technicalRating || 0} min={-1} max={1} />
-                            <span className="mt-2 font-semibold text-lg">
-                                {getRatingText(data.technicalRating || 0)}
-                            </span>
-                            <span className="text-xs text-muted-foreground uppercase tracking-widest mt-1">技術指標</span>
-                        </div>
-                        {/* Analyst Rating */}
-                        <div className="flex flex-col items-center justify-center p-4 bg-background/20 rounded-2xl text-center">
-                            <span className="text-sm text-muted-foreground mb-1">分析師目標價</span>
 
-                            {(data.targetPrice || 0) > 0 ? (
-                                <>
-                                    <span className="text-3xl font-mono font-bold text-foreground">
-                                        {(data.targetPrice || 0).toFixed(2)}
-                                    </span>
-                                    <span className={cn("text-xs font-medium mt-1 px-2 py-0.5 rounded",
-                                        (data.targetPrice || 0) > data.price ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
-                                    )}>
-                                        {(((data.targetPrice || 0) - data.price) / data.price * 100).toFixed(1)}% 潛在空間
-                                    </span>
-                                </>
-                            ) : (
-                                <div className="text-muted-foreground">
-                                    <span className="text-2xl block mb-1">🤷‍♂️</span>
-                                    <span className="text-xs">數據不足或暫無目標價</span>
-                                </div>
-                            )}
-                        </div>
+                {/* AI Radar Chart */}
+                <div className="rounded-3xl border border-border/50 bg-card/30 p-6 shadow-lg backdrop-blur-sm relative overflow-hidden">
+                    <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
+                        <span className="text-2xl">🧬</span> AI 戰力分析 (Radar)
+                    </h3>
+                    <div className="h-[300px]">
+                        {data.radarData && <AI_RadarChart data={data.radarData} />}
                     </div>
                 </div>
 
-                {/* Daily Vitals Card */}
-                <div className="rounded-3xl border border-border/50 bg-card/30 p-6 shadow-lg backdrop-blur-sm">
-                    <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
-                        <span className="text-2xl">🩺</span> 每日健檢 (Daily Vitals)
-                    </h3>
-                    <div className="grid grid-cols-2 gap-4">
-                        <VitalRow label="RSI (強弱指標)" value={(data.rsi || 50).toFixed(1)} status={getRsiStatus(data.rsi || 50)} />
-                        <VitalRow label="ATR 波動率" value={(data.atr_p || 0).toFixed(2) + "%"} status="neutral" />
-                        <VitalRow label="月績效" value={(data.perf_m || 0).toFixed(2) + "%"} status={(data.perf_m || 0) > 0 ? "good" : "bad"} />
-                        <VitalRow label="今年以來績效" value={(data.perf_ytd || 0).toFixed(2) + "%"} status={(data.perf_ytd || 0) > 0 ? "good" : "bad"} />
+                {/* Prediction Cone & Ratings */}
+                <div className="flex flex-col gap-6">
+                    {/* Prediction Cone */}
+                    <div className="rounded-3xl border border-border/50 bg-gradient-to-br from-blue-900/20 to-cyan-900/20 p-6 shadow-lg backdrop-blur-sm">
+                        <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                            <span className="text-2xl">🔮</span> AI 未來視 (Prediction)
+                        </h3>
+                        {data.prediction ? (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center bg-background/20 p-3 rounded-xl border border-white/5">
+                                    <span className="text-sm text-muted-foreground">預測信心指數</span>
+                                    <span className="font-bold text-cyan-400">{data.prediction.confidence}</span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 text-center">
+                                    <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20">
+                                        <div className="text-xs text-emerald-400">樂觀 (Bullish)</div>
+                                        <div className="font-mono font-bold">{data.prediction.upper.toFixed(2)}</div>
+                                    </div>
+                                    <div className="p-2 pt-4">
+                                        <div className="text-xs text-muted-foreground">當前</div>
+                                        <div className="font-mono font-bold text-lg">{data.price.toFixed(2)}</div>
+                                    </div>
+                                    <div className="p-2 rounded bg-rose-500/10 border border-rose-500/20">
+                                        <div className="text-xs text-rose-400">悲觀 (Bearish)</div>
+                                        <div className="font-mono font-bold">{data.prediction.lower.toFixed(2)}</div>
+                                    </div>
+                                </div>
+                                <p className="text-[10px] text-center text-muted-foreground opacity-70">
+                                    *基於 ATR 波動率推算未來 {data.prediction.days} 日潛在區間 (68% 機率)
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="text-center text-muted-foreground py-8">數據不足無法預測</div>
+                        )}
+                    </div>
 
-                        <div className="col-span-2 mt-2 pt-4 border-t border-border/30">
-                            <div className="flex justify-between items-center text-sm mb-2">
-                                <span className="text-muted-foreground">均線趨勢對齊 (SMA Trend)</span>
+                    {/* Ratings */}
+                    <div className="flex-1 rounded-3xl border border-border/50 bg-card/30 p-6 shadow-lg backdrop-blur-sm">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold flex items-center gap-2">🎯 目標價與評級</h3>
+                            <span className={cn("px-2 py-0.5 rounded text-xs", (data.targetPrice || 0) > data.price ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-500/20")}>
+                                {(((data.targetPrice || 0) - data.price) / data.price * 100).toFixed(1)}% Upside
+                            </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="text-center">
+                                <div className="text-sm text-muted-foreground mb-1">目標價</div>
+                                <div className="text-2xl font-mono font-bold">{(data.targetPrice || 0).toFixed(2)}</div>
                             </div>
-                            <div className="flex gap-1 h-2 w-full rounded-full overflow-hidden bg-secondary">
-                                <div className={cn("h-full flex-1 opacity-80", data.price > (data.sma20 || 0) ? "bg-emerald-500" : "bg-rose-500")} title="Price > SMA20" />
-                                <div className={cn("h-full flex-1 opacity-80", data.price > (data.sma50 || 0) ? "bg-emerald-500" : "bg-rose-500")} title="Price > SMA50" />
-                                <div className={cn("h-full flex-1 opacity-80", data.price > (data.sma200 || 0) ? "bg-emerald-500" : "bg-rose-500")} title="Price > SMA200" />
-                            </div>
-                            <div className="flex justify-between text-[10px] text-muted-foreground mt-1 px-1">
-                                <span>短線 (20MA)</span>
-                                <span>中線 (50MA)</span>
-                                <span>長線 (200MA)</span>
+                            <div className="text-center">
+                                <div className="text-sm text-muted-foreground mb-1">技術評級</div>
+                                <div className="text-lg font-bold" style={{ color: getRatingColor(data.technicalRating) }}>{getRatingText(data.technicalRating)}</div>
                             </div>
                         </div>
                     </div>
@@ -289,7 +286,7 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
             </div>
 
             <div className="text-center text-xs text-muted-foreground opacity-50 pb-8">
-                *SMC 指標 (RVOL, CMF) 基於即時數據快照計算.
+                *SMC 指標與預測僅供參考，不代表投資建議。
             </div>
         </motion.div>
     )
@@ -297,7 +294,9 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
 
 function Stat({ label, value, subtext, color }: { label: string; value: string | number, subtext?: string, color?: string }) {
     return (
-        <div className="flex flex-col gap-1 p-4 rounded-2xl bg-background/40 border border-border/30 backdrop-blur-md hover:bg-background/50 transition-colors">
+        <div className="flex flex-col gap-1 p-4 rounded-2xl bg-background/40 border border-border/30 backdrop-blur-md hover:bg-background/50 transition-colors group relative overflow-hidden">
+            {/* Scanner Effect Small */}
+            <div className="absolute top-0 left-0 w-full h-[1px] bg-white/20 animate-scan opacity-0 group-hover:opacity-100"></div>
             <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{label}</span>
             <span className={cn("text-2xl font-bold font-mono tracking-tight", color || "text-foreground")}>{value}</span>
             {subtext && <span className="text-[10px] text-muted-foreground/80">{subtext}</span>}
