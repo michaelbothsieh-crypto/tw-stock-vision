@@ -32,7 +32,23 @@ const SECTOR_TRANSLATIONS: Record<string, string> = {
     "Distribution Services": "流通服務",
     "Retail Trade": "零售貿易",
     "Commercial Services": "商業服務",
-    "Transportation": "運輸物流"
+    "Transportation": "運輸物流",
+    "Technology": "科技",
+    "Electronic": "電子",
+    "Financial": "金融",
+    "Basic Materials": "基礎材料",
+    "Capital Goods": "資本財",
+    "Consumer Cyclical": "週期性消費",
+    "Consumer Defensive": "防禦性消費",
+    "Healthcare": "健康醫療"
+}
+
+const EXCHANGE_TRANSLATIONS: Record<string, string> = {
+    "TWSE": "證交所",
+    "OTC": "櫃買中心",
+    "NASDAQ": "那斯達克",
+    "NYSE": "紐約證交所",
+    "AMEX": "美交所"
 }
 
 
@@ -211,7 +227,11 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
 
     return (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid gap-6">
-            <NicknameDialog open={showRegister} onRegister={handleRegister} />
+            <NicknameDialog
+                open={showRegister}
+                onRegister={handleRegister}
+                onClose={() => setShowRegister(false)}
+            />
 
             {/* 1. Header Card (Overview) */}
             <div className="rounded-3xl border border-border/50 bg-card/50 p-8 shadow-xl backdrop-blur-sm relative overflow-hidden group">
@@ -222,19 +242,16 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                     <div>
                         <div className="flex flex-wrap items-baseline gap-3">
                             <h2 className="text-4xl font-bold tracking-tight text-foreground">{data.symbol}</h2>
-                            <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-secondary-foreground">
-                                {data.symbol.match(/[A-Z]/) ? "US" : "TWSE"}
-                            </span>
-                            {data.sector !== 'N/A' && (
-                                <span className="rounded-full border border-zinc-700 px-2.5 py-0.5 text-xs text-zinc-400">
-                                    {SECTOR_TRANSLATIONS[data.sector] || data.sector}
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-800 text-zinc-400 border border-zinc-700">
+                                    {EXCHANGE_TRANSLATIONS[data.exchange] || data.exchange}
                                 </span>
-                            )}
-                            {data.industry !== 'N/A' && (
-                                <span className="rounded-full border border-zinc-700 px-2.5 py-0.5 text-xs text-zinc-400">
-                                    {SECTOR_TRANSLATIONS[data.industry] || data.industry}
-                                </span>
-                            )}
+                                {data.sector && data.sector !== 'N/A' && (
+                                    <span className="px-3 py-0.5 rounded-full text-xs bg-zinc-800/50 text-zinc-400 border border-zinc-700/50">
+                                        {SECTOR_TRANSLATIONS[data.sector] || data.sector}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         <p className="mt-1 text-2xl font-bold text-primary/90">{data.name || data.symbol}</p>
 
