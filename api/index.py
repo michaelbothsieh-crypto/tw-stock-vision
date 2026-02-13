@@ -477,7 +477,7 @@ class handler(BaseHTTPRequestHandler):
                 StockField.EPS_DILUTED_TTM_YOY_GROWTH, StockField.REVENUE_TTM_YOY_GROWTH,
                 StockField.PRICE_TO_EARNINGS_RATIO_TTM, StockField.PRICE_EARNINGS_GROWTH_TTM,
                 StockField.GRAHAM_NUMBERS_TTM, StockField.RECOMMENDATION_MARK,
-                StockField.BASIC_EPS_TTM, StockField.PRICE_TO_BOOK_RATIO_TTM
+                StockField.BASIC_EPS_TTM
             )
 
             df = ss.get()
