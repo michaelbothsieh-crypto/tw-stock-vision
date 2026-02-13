@@ -470,8 +470,9 @@ class handler(BaseHTTPRequestHandler):
             )
 
             if symbol.isdigit():
-                 # For Taiwanese stock numbers, try exact match on name
-                 ss.add_filter(tvs.StockField.NAME, tvs.FilterOperator.EQUAL, symbol)
+                 # For Taiwanese stock numbers, try searching without strict Equal first 
+                 # ss.add_filter(tvs.StockField.NAME, tvs.FilterOperator.EQUAL, symbol)
+                 pass # Let get() fetch broader or use the mask below
             elif not is_chinese:
                  ss.add_filter(tvs.StockField.NAME, tvs.FilterOperator.MATCH, symbol)
             

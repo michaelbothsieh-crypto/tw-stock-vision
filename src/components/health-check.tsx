@@ -5,16 +5,16 @@ import { cn } from "@/lib/utils"
 
 interface HealthCheckProps {
     data: {
-        fScore: number
-        zScore: number
-        grossMargin: number
-        netMargin: number
-        operatingMargin: number
-        epsGrowth: number
-        revGrowth: number
-        peRatio: number
-        pegRatio: number
-        grahamNumber: number
+        fScore: number | string
+        zScore: number | string
+        grossMargin: number | string
+        netMargin: number | string
+        operatingMargin: number | string
+        epsGrowth: number | string
+        revGrowth: number | string
+        peRatio: number | string
+        pegRatio: number | string
+        grahamNumber: number | string
         price: number
     }
 }
@@ -34,9 +34,25 @@ export function HealthCheck({ data }: HealthCheckProps) {
         return "text-rose-400" // Distress
     }
 
+    // Safe value conversion
+    const getNum = (val: any): number => {
+        if (typeof val === 'number') return val;
+        const n = parseFloat(String(val));
+        return isNaN(n) ? 0 : n;
+    }
+
+    const zScore = getNum(data.zScore)
+    const grahamNumber = getNum(data.grahamNumber)
+    const grossMargin = getNum(data.grossMargin)
+    const operatingMargin = getNum(data.operatingMargin)
+    const netMargin = getNum(data.netMargin)
+    const peRatio = getNum(data.peRatio)
+    const pegRatio = getNum(data.pegRatio)
+    const fScore = getNum(data.fScore)
+
     const getValuationStatus = () => {
-        if (data.grahamNumber === 0) return { text: "無法估算", color: "text-zinc-500" }
-        const difference = (data.price - data.grahamNumber) / data.grahamNumber
+        if (grahamNumber === 0) return { text: "無法估算", color: "text-zinc-500" }
+        const difference = (data.price - grahamNumber) / grahamNumber
         if (difference < -0.2) return { text: "被低估", color: "text-emerald-400" }
         if (difference > 0.2) return { text: "被高估", color: "text-rose-400" }
         return { text: "合理", color: "text-yellow-400" }
@@ -76,12 +92,12 @@ export function HealthCheck({ data }: HealthCheckProps) {
                                             </Tooltip>
                                         </TooltipProvider>
                                     </div>
-                                    <span className={cn("font-mono font-bold text-xl", getScoreColor(data.fScore, 9))}>
-                                        {data.fScore} <span className="text-xs font-normal text-zinc-600">/ 9</span>
+                                    <span className={cn("font-mono font-bold text-xl", getScoreColor(fScore, 9))}>
+                                        {fScore} <span className="text-xs font-normal text-zinc-600">/ 9</span>
                                     </span>
                                 </div>
                                 <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                                    <div className={cn("h-full rounded-full transition-all duration-1000", getScoreColor(data.fScore, 9).replace('text-', 'bg-'))} style={{ width: `${(data.fScore / 9) * 100}%` }} />
+                                    <div className={cn("h-full rounded-full transition-all duration-1000", getScoreColor(fScore, 9).replace('text-', 'bg-'))} style={{ width: `${(fScore / 9) * 100}%` }} />
                                 </div>
                             </div>
 
@@ -98,12 +114,12 @@ export function HealthCheck({ data }: HealthCheckProps) {
                                             </Tooltip>
                                         </TooltipProvider>
                                     </div>
-                                    <span className={cn("font-mono font-bold text-xl", getZScoreColor(data.zScore))}>
-                                        {data.zScore > 0 ? data.zScore.toFixed(2) : "-"}
+                                    <span className={cn("font-mono font-bold text-xl", getZScoreColor(zScore))}>
+                                        {zScore > 0 ? zScore.toFixed(2) : "-"}
                                     </span>
                                 </div>
                                 <p className="text-[10px] text-zinc-500 text-right italic">
-                                    {data.zScore > 2.99 ? "財務安全" : data.zScore > 1.81 ? "灰色地帶" : data.zScore > 0 ? "財務預警" : "數據缺失"}
+                                    {zScore > 2.99 ? "財務安全" : zScore > 1.81 ? "灰色地帶" : zScore > 0 ? "財務預警" : "數據缺失"}
                                 </p>
                             </div>
                         </div>
@@ -121,16 +137,16 @@ export function HealthCheck({ data }: HealthCheckProps) {
                     <div className="space-y-4 py-2">
                         <div className="flex justify-between items-center border-b border-white/5 pb-2">
                             <span className="text-sm text-zinc-400">毛利率 (Gross)</span>
-                            <span className="font-mono font-bold text-lg">{data.grossMargin !== undefined && data.grossMargin !== null ? data.grossMargin.toFixed(1) + "%" : "-"}</span>
+                            <span className="font-mono font-bold text-lg">{grossMargin !== 0 ? grossMargin.toFixed(1) + "%" : "-"}</span>
                         </div>
                         <div className="flex justify-between items-center border-b border-white/5 pb-2">
                             <span className="text-sm text-zinc-400">營益率 (Operating)</span>
-                            <span className="font-mono font-bold text-lg">{data.operatingMargin !== undefined && data.operatingMargin !== null ? data.operatingMargin.toFixed(1) + "%" : "-"}</span>
+                            <span className="font-mono font-bold text-lg">{operatingMargin !== 0 ? operatingMargin.toFixed(1) + "%" : "-"}</span>
                         </div>
                         <div className="flex justify-between items-center pb-2">
                             <span className="text-sm text-zinc-400">淨利率 (Net)</span>
-                            <span className={cn("font-mono font-bold text-lg", (data.netMargin || 0) > 0 ? "text-emerald-400" : "text-rose-400")}>
-                                {data.netMargin !== undefined && data.netMargin !== null ? data.netMargin.toFixed(1) + "%" : "-"}
+                            <span className={cn("font-mono font-bold text-lg", (netMargin || 0) > 0 ? "text-emerald-400" : "text-rose-400")}>
+                                {netMargin !== 0 ? netMargin.toFixed(1) + "%" : "-"}
                             </span>
                         </div>
                     </div>
@@ -150,21 +166,21 @@ export function HealthCheck({ data }: HealthCheckProps) {
                         </div>
                         <div className="text-[10px] text-zinc-500 uppercase leading-relaxed text-balance px-2">
                             目前股價 vs 葛拉漢合理價 <br />
-                            <span className="font-mono text-zinc-400 text-xs">{data.grahamNumber > 0 ? `$${data.grahamNumber.toFixed(1)}` : "數據暫缺"}</span>
+                            <span className="font-mono text-zinc-400 text-xs">{grahamNumber > 0 ? `$${grahamNumber.toFixed(1)}` : "數據暫缺"}</span>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 text-center border-t border-white/5 pt-4">
                         <div>
                             <div className="text-[10px] text-zinc-500 uppercase mb-1">P/E Ratio</div>
-                            <div className="font-mono font-bold text-base text-zinc-300">{data.peRatio > 0 ? data.peRatio.toFixed(1) : "-"}</div>
+                            <div className="font-mono font-bold text-base text-zinc-300">{peRatio > 0 ? peRatio.toFixed(1) : "-"}</div>
                         </div>
                         <div>
                             <div className="text-[10px] text-zinc-500 uppercase mb-1">PEG Ratio</div>
                             <div className={cn("font-mono font-bold text-base",
-                                data.pegRatio > 0 && data.pegRatio < 1 ? "text-emerald-400" :
-                                    data.pegRatio > 1.5 ? "text-rose-400" : "text-zinc-300"
-                            )}>{data.pegRatio > 0 ? data.pegRatio.toFixed(2) : "-"}</div>
+                                pegRatio > 0 && pegRatio < 1 ? "text-emerald-400" :
+                                    pegRatio > 1.5 ? "text-rose-400" : "text-zinc-300"
+                            )}>{pegRatio > 0 ? pegRatio.toFixed(2) : "-"}</div>
                         </div>
                     </div>
                 </div>
