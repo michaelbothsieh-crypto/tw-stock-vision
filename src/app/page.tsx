@@ -1,48 +1,40 @@
 "use client"
 
 import { useState } from "react"
-import { StockSearch } from "@/components/stock-search"
+import { Search } from "lucide-react"
 import { StockDashboard } from "@/components/stock-dashboard"
+import { Leaderboard } from "@/components/leaderboard"
+import { NicknameDialog } from "@/components/nickname-dialog"
+import { useUser } from "@/hooks/use-user"
 
 export default function Home() {
-    const [symbol, setSymbol] = useState<string | null>(null)
-    const [data, setData] = useState<any>(null)
+    const [query, setQuery] = useState("")
+    const [stockData, setStockData] = useState(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const { user, register } = useUser()
 
-    const handleSearch = async (query: string) => {
-        setSymbol(query)
+    const searchStock = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!query) return
+
         setLoading(true)
         setError(null)
-        setData(null)
+        setStockData(null)
 
         try {
-            // Fetch data from our Python API
-            // Note: In development without 'vercel dev', this will 404 if hitting /api directly.
-            // We need a way to mock or proxy. 
-            // For now, let's assume it works and implement the fetch.
-            // If deployed or running with 'vercel dev', this works.
-            const res = await fetch(`/api?symbol=${query}`)
-            if (!res.ok) throw new Error("Failed to fetch data")
-
-            const json = await res.json()
-            if (json.error) throw new Error(json.error)
-
-            // Transform API response to UI model if needed
-            // Currently our API returns basic info, we might need to mock detailed data 
-            // until the backend is fully fleshed out.
-
-            // Real data only
-            setData(json)
-
+            const res = await fetch(`http://127.0.0.1:8000?symbol=${query}`)
+            if (!res.ok) throw new Error("API Error")
+            const data = await res.json()
+            if (data.error) throw new Error(data.error)
+            setStockData(data)
         } catch (err) {
-            setError(err instanceof Error ? err.message : "An unknown error occurred")
+            setError("無法取得資料，請檢查代號是否正確")
         } finally {
             setLoading(false)
         }
     }
 
-    // Auto-load 2330 on mount if no data
     if (!data && !loading && !error && !symbol) {
         handleSearch("2330")
     }

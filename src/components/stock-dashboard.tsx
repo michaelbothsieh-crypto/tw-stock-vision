@@ -6,6 +6,10 @@ import confetti from "canvas-confetti"
 import { cn } from "@/lib/utils"
 import Typewriter from 'typewriter-effect';
 import { AI_RadarChart } from "./ui/radar-chart"
+import { Info, PlusCircle, Trophy } from "lucide-react"
+import * as Tooltip from '@radix-ui/react-tooltip';
+import { toast } from "sonner"
+import { useUser } from "@/hooks/use-user"
 
 interface StockData {
     symbol: string
@@ -51,6 +55,23 @@ interface StockDashboardProps {
     loading: boolean
     error?: string | null
 }
+
+// Helper for Tooltip
+const InfoTooltip = ({ content }: { content: string }) => (
+    <Tooltip.Provider>
+        <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+                <Info className="h-4 w-4 text-muted-foreground/70 hover:text-foreground cursor-help" />
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+                <Tooltip.Content className="max-w-[200px] bg-popover text-popover-foreground text-xs p-2 rounded shadow-md border animate-in fade-in-0 zoom-in-95" sideOffset={5}>
+                    {content}
+                    <Tooltip.Arrow className="fill-popover" />
+                </Tooltip.Content>
+            </Tooltip.Portal>
+        </Tooltip.Root>
+    </Tooltip.Provider>
+)
 
 export function StockDashboard({ data, loading, error }: StockDashboardProps) {
     const [aiCommentString, setAiCommentString] = useState<string>("")
@@ -129,38 +150,12 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
     const isPositive = data.change >= 0
 
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="grid gap-6"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid gap-6">
 
-            {/* SMC Score Bar */}
-            <div className="rounded-2xl bg-gradient-to-r from-violet-600/20 to-indigo-600/20 p-1 border border-violet-500/30">
-                <div className="flex items-center justify-between px-4 py-2">
-                    <span className="font-bold text-violet-300 flex items-center gap-2">
-                        🧠 SMC 主力信心指數
-                    </span>
-                    <span className="text-2xl font-mono font-bold text-white shadow-glow">{data.smcScore} / 100</span>
-                </div>
-                <div className="h-2 w-full bg-black/20 rounded-full overflow-hidden mx-1 mb-1">
-                    <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${data.smcScore}%` }}
-                        transition={{ duration: 1, ease: "easeOut" }}
-                        className={cn("h-full", data.smcScore > 60 ? "bg-gradient-to-r from-violet-500 to-fuchsia-500" : "bg-zinc-500")}
-                    />
-                </div>
-            </div>
-
-            {/* Header Card */}
+            {/* 1. Header Card (Overview) */}
             <div className="rounded-3xl border border-border/50 bg-card/50 p-8 shadow-xl backdrop-blur-sm relative overflow-hidden group">
-                {/* Scanner Animation */}
                 <div className="absolute top-0 left-0 w-full h-[2px] bg-primary/50 shadow-[0_0_15px_3px_rgba(59,130,246,0.5)] animate-scan opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-
-                <div className="absolute top-0 right-0 p-4 opacity-10 text-9xl">
-                    {isPositive ? "🐂" : "🐻"}
-                </div>
+                <div className="absolute top-0 right-0 p-4 opacity-10 text-9xl">{isPositive ? "🐂" : "🐻"}</div>
 
                 <div className="relative z-10 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                     <div>
@@ -172,14 +167,25 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                         </div>
                         <p className="mt-1 text-2xl font-bold text-primary/90">{data.name || data.symbol}</p>
 
-                        {/* Typewriter AI Comment */}
+                        {/* Add to Portfolio Button */}
+                        <button
+                            onClick={handleAddToPortfolio}
+                            disabled={adding || !user}
+                            className="mt-4 flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <PlusCircle className="h-4 w-4" />
+                            {adding ? "加入中..." : "加入追蹤"}
+                        </button>
+                        {/* Loop Typewriter */}
                         <div className="mt-4 min-h-[40px] inline-flex items-center rounded-2xl bg-primary/10 px-4 py-2 text-primary font-medium border border-primary/20">
                             <span className="mr-2">🤖</span>
                             <Typewriter
                                 options={{
                                     strings: [aiCommentString],
                                     autoStart: true,
-                                    delay: 40,
+                                    loop: true,
+                                    delay: 50,
+                                    deleteSpeed: 30,
                                     cursor: '▋'
                                 }}
                             />

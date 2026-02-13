@@ -66,11 +66,30 @@ def init_db():
     conn = get_db_connection()
     try:
         cur = conn.cursor()
+        # Stock Cache Table
         cur.execute("""
             CREATE TABLE IF NOT EXISTS stock_cache (
                 symbol TEXT PRIMARY KEY,
                 data JSONB,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        # Users Table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                nickname TEXT UNIQUE NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        # Portfolio Table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS portfolio_items (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID REFERENCES users(id),
+                symbol TEXT NOT NULL,
+                entry_price NUMERIC NOT NULL,
+                entry_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
         conn.commit()
@@ -85,11 +104,116 @@ except Exception as e:
     print(f"DB Init Error: {e}")
 
 class handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length)
+        data = json.loads(post_data.decode('utf-8'))
+        action = data.get('action')
+
+        conn = get_db_connection()
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            
+            if action == 'register':
+                nickname = data.get('nickname')
+                # Check if exists
+                cur.execute("SELECT id, nickname FROM users WHERE nickname = %s", (nickname,))
+                user = cur.fetchone()
+                if not user:
+                    cur.execute("INSERT INTO users (nickname) VALUES (%s) RETURNING id, nickname", (nickname,))
+                    user = cur.fetchone()
+                    conn.commit()
+                self.wfile.write(json.dumps(user, default=str).encode('utf-8'))
+
+            elif action == 'add_portfolio':
+                user_id = data.get('user_id')
+                symbol = data.get('symbol')
+                price = data.get('price')
+                cur.execute("""
+                    INSERT INTO portfolio_items (user_id, symbol, entry_price) 
+                    VALUES (%s, %s, %s) 
+                    RETURNING id
+                """, (user_id, symbol, price))
+                conn.commit()
+                self.wfile.write(json.dumps({"status": "success"}, default=str).encode('utf-8'))
+            
+            # Fetch user portfolio
+            elif action == 'get_portfolio':
+                user_id = data.get('user_id')
+                cur.execute("""
+                    SELECT p.symbol, p.entry_price, p.entry_date, s.data->>'price' as current_price
+                    FROM portfolio_items p
+                    LEFT JOIN stock_cache s ON p.symbol = s.symbol
+                    WHERE p.user_id = %s
+                    ORDER BY p.entry_date DESC
+                """, (user_id,))
+                items = cur.fetchall()
+                # Calculate return for each (using cached price if avail)
+                # Note: This relies on cache being populated. If not, price might be null.
+                self.wfile.write(json.dumps(items, default=str).encode('utf-8'))
+
+            cur.close()
+        except Exception as e:
+            self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+        finally:
+            return_db_connection(conn)
+
     def do_GET(self):
-        # Parse query parameters
+        # ... logic for handling GET ...
         parsed_path = urlparse(self.path)
-        query_params = parse_qs(parsed_path.query)
-        symbol = query_params.get('symbol', [None])[0]
+        query = parse_qs(parsed_path.query)
+        
+        # Leaderboard Endpoint
+        if 'leaderboard' in query:
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            
+            conn = get_db_connection()
+            try:
+                cur = conn.cursor(cursor_factory=RealDictCursor)
+                # Naive leaderboard: Average return of all items
+                # In real world, this needs more complex query or pre-calculation
+                # For now, let's just fetch recent portfolio items and return them as a feed
+                cur.execute("""
+                    SELECT u.nickname, p.symbol, p.entry_price, p.entry_date, s.data->>'price' as current_price
+                    FROM portfolio_items p
+                    JOIN users u ON p.user_id = u.id
+                    LEFT JOIN stock_cache s ON p.symbol = s.symbol
+                    ORDER BY p.entry_date DESC
+                    LIMIT 20
+                """)
+                rows = cur.fetchall()
+                # Calculate simple return % on the fly
+                results = []
+                for row in rows:
+                    curr = float(row['current_price']) if row['current_price'] else 0
+                    entry = float(row['entry_price'])
+                    ret = ((curr - entry) / entry) * 100 if curr > 0 else 0
+                    results.append({
+                        "nickname": row['nickname'],
+                        "symbol": row['symbol'],
+                        "return": ret,
+                        "date": row['entry_date']
+                    })
+                
+                self.wfile.write(json.dumps(results, default=str).encode('utf-8'))
+                cur.close()
+            except Exception as e:
+                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+            finally:
+                return_db_connection(conn)
+            return
+
+        # Stock Lookup
+        symbol = query.get('symbol', [None])[0]
+
         
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
