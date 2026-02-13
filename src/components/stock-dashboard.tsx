@@ -11,6 +11,7 @@ import * as Tooltip from '@radix-ui/react-tooltip';
 import { toast } from "sonner"
 import { useUser } from "@/hooks/use-user"
 import { NicknameDialog } from "./nickname-dialog"
+import { HealthCheck } from "./health-check"
 
 interface StockData {
     symbol: string
@@ -49,6 +50,20 @@ interface StockData {
         days: number
     }
     radarData?: any[]
+    // Fundamental Data
+    sector: string
+    industry: string
+    employees: number
+    fScore: number
+    zScore: number
+    grossMargin: number
+    netMargin: number
+    operatingMargin: number
+    epsGrowth: number
+    revGrowth: number
+    peRatio: number
+    pegRatio: number
+    grahamNumber: number
 }
 
 interface StockDashboardProps {
@@ -214,11 +229,21 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
 
                 <div className="relative z-10 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                     <div>
-                        <div className="flex items-baseline gap-3">
+                        <div className="flex flex-wrap items-baseline gap-3">
                             <h2 className="text-4xl font-bold tracking-tight text-foreground">{data.symbol}</h2>
                             <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-secondary-foreground">
                                 {data.symbol.match(/[A-Z]/) ? "US" : "TWSE"}
                             </span>
+                            {data.sector !== 'N/A' && (
+                                <span className="rounded-full border border-zinc-700 px-2.5 py-0.5 text-xs text-zinc-400">
+                                    {data.sector}
+                                </span>
+                            )}
+                            {data.industry !== 'N/A' && (
+                                <span className="rounded-full border border-zinc-700 px-2.5 py-0.5 text-xs text-zinc-400">
+                                    {data.industry}
+                                </span>
+                            )}
                         </div>
                         <p className="mt-1 text-2xl font-bold text-primary/90">{data.name || data.symbol}</p>
 
@@ -275,7 +300,10 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                 </div>
             </div>
 
-            {/* AI Analysis Grid */}
+            {/* 3. Fundamental Health Check */}
+            <HealthCheck data={data} />
+
+            {/* 4. AI Analysis Grid */}
             <div className="grid gap-6 md:grid-cols-2">
 
                 {/* AI Radar Chart */}
