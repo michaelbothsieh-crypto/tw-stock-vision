@@ -74,7 +74,35 @@ const InfoTooltip = ({ content }: { content: string }) => (
 )
 
 export function StockDashboard({ data, loading, error }: StockDashboardProps) {
+    const { user } = useUser()
+    const [adding, setAdding] = useState(false)
     const [aiCommentString, setAiCommentString] = useState<string>("")
+
+    const handleAddToPortfolio = async () => {
+        if (!user || !data) return
+        setAdding(true)
+        try {
+            const res = await fetch('http://127.0.0.1:8000', {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'add_portfolio',
+                    user_id: user.id,
+                    symbol: data.symbol,
+                    price: data.price
+                })
+            })
+            const result = await res.json()
+            if (result.status === 'success') {
+                toast.success(`已將 ${data.symbol} 加入投資組合！`)
+            } else {
+                toast.error("加入失敗")
+            }
+        } catch (e) {
+            toast.error("連線錯誤")
+        } finally {
+            setAdding(false)
+        }
+    }
 
     useEffect(() => {
         if (data) {

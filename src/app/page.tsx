@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Search } from "lucide-react"
 import { StockDashboard } from "@/components/stock-dashboard"
 import { Leaderboard } from "@/components/leaderboard"
@@ -35,55 +35,71 @@ export default function Home() {
         }
     }
 
-    if (!data && !loading && !error && !symbol) {
-        handleSearch("2330")
-    }
-
     return (
-        <main className="min-h-screen bg-background text-foreground selection:bg-primary/20">
-            {/* Background Gradients */}
-            <div className="fixed inset-0 -z-10 h-full w-full bg-background">
-                <div className="absolute top-0 -left-4 w-72 h-72 bg-primary/20 rounded-full mix-blend-screen filter blur-[128px] opacity-50 shadow-2xl animate-pulse" />
-                <div className="absolute top-0 -right-4 w-72 h-72 bg-accent/20 rounded-full mix-blend-screen filter blur-[128px] opacity-50 shadow-2xl animate-pulse delay-1000" />
-            </div>
+        <main className="min-h-screen bg-black text-white selection:bg-primary selection:text-primary-foreground">
+            {/* Nickname Dialog */}
+            <NicknameDialog open={!user} onRegister={register} />
 
-            {/* Navbar */}
-            <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
-                <div className="container px-4 md:px-8 h-16 flex items-center justify-between mx-auto max-w-7xl">
-                    <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                            <span className="font-bold text-white">TW</span>
-                        </div>
-                        <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
-                            TwStockVision
-                        </span>
+            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"></div>
+
+            <div className="container mx-auto px-4 py-12 max-w-5xl relative">
+                <header className="mb-12 text-center space-y-4">
+                    <h1 className="text-5xl md:text-7xl font-extrabold tracking-tighter bg-gradient-to-br from-white to-zinc-500 bg-clip-text text-transparent">
+                        TwStock<span className="text-primary glow-text">Vision</span>
+                    </h1>
+                    <p className="text-zinc-400 text-lg max-w-2xl mx-auto">
+                        AI 驅動的台股/美股視覺化分析儀表板
+                    </p>
+                </header>
+
+                {/* Search Bar */}
+                <form onSubmit={searchStock} className="relative max-w-2xl mx-auto mb-16 group">
+                    <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                    <div className="relative flex items-center">
+                        <input
+                            type="text"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="輸入代號 (e.g., 2330, TSLA)..."
+                            className="w-full bg-zinc-900/80 border border-zinc-800 rounded-full px-6 py-4 pl-14 text-xl focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-2xl"
+                        />
+                        <Search className="absolute left-5 text-zinc-500 w-6 h-6" />
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="absolute right-3 bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2 rounded-full font-bold transition-all disabled:opacity-50"
+                        >
+                            {loading ? "分析中..." : "分析"}
+                        </button>
+                    </div>
+                </form>
+
+                {/* Main Content Area */}
+                <div className="grid gap-12 lg:grid-cols-[1fr_300px]">
+
+                    {/* Left: Stock Dashboard */}
+                    <div className="min-h-[500px]">
+                        <StockDashboard data={stockData} loading={loading} error={error} />
+                    </div>
+
+                    {/* Right: Leaderboard */}
+                    <div className="space-y-6">
+                        <Leaderboard />
+
+                        {/* User Profile Card (Mini) */}
+                        {user && (
+                            <div className="p-4 rounded-2xl bg-zinc-900/50 border border-zinc-800">
+                                <div className="text-xs text-zinc-500 uppercase font-bold mb-2">My Profile</div>
+                                <div className="font-bold text-lg">{user.nickname}</div>
+                                <div className="text-xs text-zinc-400 mt-1">ID: {user.id.slice(0, 8)}...</div>
+                            </div>
+                        )}
                     </div>
                 </div>
-            </nav>
 
-            <div className="container mx-auto max-w-7xl px-4 md:px-8 py-8 space-y-8">
-                {/* Search Header */}
-                <div className="flex flex-col md:flex-row items-center justify-between gap-6 py-8">
-                    <div className="text-center md:text-left space-y-4">
-                        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl text-foreground/90">
-                            TwStockVision <span className="text-primary">智能股市視野</span>
-                        </h1>
-                        <div className="text-muted-foreground text-lg max-w-[650px] leading-relaxed">
-                            <p className="mb-2">專為現代投資人打造的 <span className="font-semibold text-foreground">SMC 聰明錢</span> 技術分析儀表板。</p>
-                            <ul className="grid gap-2 text-base mt-4 border-l-2 border-primary/30 pl-4">
-                                <li>🤖 <b>AI 輔助解讀</b>：一秒看懂多空趨勢，不再被 K 線圖淹沒。</li>
-                                <li>⚡ <b>SMC 主力籌碼</b>：即時追蹤資金流向 (RVOL) 與機構佈局。</li>
-                                <li>🎯 <b>目標價運算</b>：整合分析師預期與技術位階，提供進出參考。</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div className="w-full md:w-auto">
-                        <StockSearch onSearch={handleSearch} className="md:w-[400px] shadow-lg" />
-                    </div>
-                </div>
-
-                {/* Dashboard Content */}
-                <StockDashboard data={data} loading={loading} error={error} />
+                <footer className="mt-20 text-center text-zinc-600 text-sm">
+                    Build with ❤️ by Gemini & Vercel
+                </footer>
             </div>
         </main>
     )
