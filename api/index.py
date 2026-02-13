@@ -255,17 +255,17 @@ def fetch_from_yfinance(symbol):
         print(f"yfinance error: {e}")
         return None
 
-# Initialize DB on start (Note: In pure serverless like Vercel, this might run on every cold start)
-def get_field(data, keys, default=0):
-    for k in keys:
-        if k in data and data[k] is not None:
-            val = data[k]
-            # Handle string formatting like '10.5%'
-            if isinstance(val, str) and '%' in val:
-                try: val = float(val.replace('%', ''))
-                except: pass
-            return val
-    return default
+# Deep Sanitization for JSON serialization (handles nan/inf)
+def sanitize_json(obj):
+    if isinstance(obj, dict):
+        return {k: sanitize_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_json(i) for i in obj]
+    elif isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return 0
+        return obj
+    return obj
 
 class handler(BaseHTTPRequestHandler):
     def _set_headers(self):
@@ -653,18 +653,6 @@ class handler(BaseHTTPRequestHandler):
                 "grahamNumber": graham_number
             }
             
-            # Deep Sanitization for JSON serialization (handles nan/inf)
-            def sanitize_json(obj):
-                if isinstance(obj, dict):
-                    return {k: sanitize_json(v) for k, v in obj.items()}
-                elif isinstance(obj, list):
-                    return [sanitize_json(i) for i in obj]
-                elif isinstance(obj, float):
-                    if math.isnan(obj) or math.isinf(obj):
-                        return 0
-                    return obj
-                return obj
-
             safe_response = sanitize_json(response_data)
 
             # Save and Respond
@@ -704,16 +692,24 @@ class handler(BaseHTTPRequestHandler):
         
         try:
             # Route handling (Support both direct / and proxied /api/ prefix)
-            if 'leaderboard' in query:
+            # Vercel might pass subpaths differently
+            if 'leaderboard' in query or '/leaderboard' in path:
                 self._handle_leaderboard()
             elif 'symbol' in query:
                 self._handle_stock_lookup(query['symbol'][0])
+            elif '/stock/' in path: # Handle /api/stock/2330 style if ever used
+                symbol_from_path = path.split('/')[-1]
+                if symbol_from_path and symbol_from_path != 'stock':
+                    self._handle_stock_lookup(symbol_from_path)
+                else:
+                    self._set_headers()
+                    self.wfile.write(json.dumps({"error": "Missing symbol"}).encode('utf-8'))
             elif path.endswith('/health'):
                 self._set_headers()
                 self.wfile.write(json.dumps({"status": "ok", "db": db_alive}).encode('utf-8'))
             else:
                 self._set_headers()
-                self.wfile.write(json.dumps(sanitize_json({"error": f"Invalid endpoint: {path}"})).encode('utf-8'))
+                self.wfile.write(json.dumps(sanitize_json({"error": f"Invalid endpoint: {path}", "query": list(query.keys())})).encode('utf-8'))
         except Exception as e:
             print(f"Global GET Error on {path}: {e}")
             import traceback
