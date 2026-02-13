@@ -240,6 +240,9 @@ class handler(BaseHTTPRequestHandler):
             
             action = data.get('action')
             conn = get_db_connection()
+            if conn is None:
+                self.wfile.write(json.dumps({"error": "Database connection failed"}).encode('utf-8'))
+                return
             cur = conn.cursor()
 
             if action == 'register_user':
@@ -312,7 +315,7 @@ class handler(BaseHTTPRequestHandler):
     def _handle_leaderboard(self):
         self._set_headers()
         conn = get_db_connection()
-        if not conn:
+        if conn is None:
             self.wfile.write(json.dumps({"error": "Database unreachable"}).encode('utf-8'))
             return
         try:
