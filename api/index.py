@@ -456,6 +456,9 @@ class handler(BaseHTTPRequestHandler):
             else:
                 ss.set_markets(tvs.Market.TAIWAN)
             
+            # USE SEARCH for specific symbol (Much faster than full get)
+            ss.search(symbol)
+            
             # Select necessary fields for SMC & Health
             ss.select(
                 StockField.NAME, StockField.DESCRIPTION, StockField.PRICE, 
@@ -476,39 +479,28 @@ class handler(BaseHTTPRequestHandler):
                 StockField.BASIC_EPS_TTM, StockField.PRICE_TO_BOOK_RATIO_TTM
             )
 
-            if symbol.isdigit():
-                 pass # Let get() fetch broader or use the mask below
-            elif not is_chinese:
-                 ss.add_filter(tvs.StockField.NAME, tvs.FilterOperator.MATCH, symbol)
-            
             df = ss.get()
             
-            if df.empty and not is_us_stock:
-                print(f"Empty results for {symbol} with filter, trying broader search...")
-                ss = StockScreener()
-                ss.set_markets(tvs.Market.TAIWAN)
-                df = ss.get() # Get all and filter locally
-            
-            result = None
+            result_row = None
             if not df.empty:
-                search_cols = [c for c in df.columns if c in ['Symbol', 'Description', 'Name', 'Ticker']]
-                mask = pd.Series(False, index=df.index)
-                for col in search_cols:
-                    mask |= df[col].astype(str).str.contains(symbol, case=False, na=False)
-                
-                if mask.any():
-                    result = df[mask]
-                else:
-                    result = df
-            
-            if result is not None and not result.empty:
-                data = result.iloc[0].to_dict()
-                ticker_keys = ['Symbol', 'Ticker', 'Name']
-                ticker = symbol # default fallback
-                for k in ticker_keys:
-                    if k in data and data[k] and str(data[k]).strip():
-                        ticker = str(data[k]).split(':')[-1] # Remove exchange prefix if exists
+                # Find best match from results
+                for _, row in df.iterrows():
+                    row_dict = row.to_dict()
+                    row_sym = str(row_dict.get('Symbol', '')).upper()
+                    row_name = str(row_dict.get('Name', '')).upper()
+                    if symbol in row_sym or symbol in row_name:
+                        result_row = row_dict
                         break
+                
+                if not result_row:
+                    result_row = df.iloc[0].to_dict()
+            
+            if result_row:
+                data = result_row
+                ticker = symbol # default
+                # Extract clean ticker
+                raw_ticker = str(data.get('Symbol', data.get('Name', symbol)))
+                ticker = raw_ticker.split(':')[-1]
                 
                 raw_name = data.get('Description', data.get('Name', ''))
                 display_name = TW_STOCK_NAMES.get(ticker, raw_name)
@@ -516,18 +508,12 @@ class handler(BaseHTTPRequestHandler):
                 if not is_us_stock and ticker in TW_STOCK_NAMES:
                     display_name = TW_STOCK_NAMES[ticker]
             else:
-                ticker = symbol
-                display_name = TW_STOCK_NAMES.get(ticker, symbol)
-
-            # FALLBACK TO YFINANCE
-            if result is None or result.empty:
+                # FALLBACK TO YFINANCE immediately if TV yields nothing
                 print(f"No match in tvscreener for {symbol}, trying yfinance...")
-                yf_data = fetch_from_yfinance(symbol) # Helper below
+                yf_data = fetch_from_yfinance(symbol)
                 if yf_data:
-                    # IMPORTANT: Force name override even for yfinance
                     if not is_us_stock and symbol in TW_STOCK_NAMES:
                          yf_data['name'] = TW_STOCK_NAMES[symbol]
-                    
                     self._save_to_cache(symbol, yf_data)
                     self.wfile.write(json.dumps(yf_data, default=str).encode('utf-8'))
                     return
