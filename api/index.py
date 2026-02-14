@@ -344,21 +344,28 @@ class handler(BaseHTTPRequestHandler):
     def _handle_market_trending(self):
         self._set_headers()
         try:
+            parsed = urlparse(self.path)
+            q = parse_qs(parsed.query)
+            market_param = q.get('market', ['TW'])[0].upper()
+            
             ss = StockScreener()
-            ss.set_markets(tvs.Market.TAIWAN)
+            if market_param == 'US' or market_param == 'AMERICA':
+                ss.set_markets(tvs.Market.AMERICA)
+            else:
+                ss.set_markets(tvs.Market.TAIWAN)
+            
             ss.select(StockField.NAME, StockField.DESCRIPTION, StockField.PRICE, StockField.CHANGE_PERCENT, StockField.TECHNICAL_RATING)
             ss.sort_by(StockField.TECHNICAL_RATING, ascending=False)
             df = ss.get()
             
             if df.empty:
-                # Fallback to a few popular stocks if TV fails
-                popular_symbols = ["2330", "2317", "2454", "2603", "2881"]
+                popular_symbols = ["2330", "2317", "2454", "2603", "2881"] if market_param == 'TW' else ["NVDA", "AAPL", "TSLA", "MSFT", "GOOGL"]
                 results = []
                 for sym in popular_symbols:
                     price = self._fetch_price_internal(sym)
                     results.append({
                         "symbol": sym,
-                        "description": TW_STOCK_NAMES.get(sym, "台灣績優股"),
+                        "description": TW_STOCK_NAMES.get(sym, sym if market_param == 'US' else "熱門標的"),
                         "price": price,
                         "changePercent": 0,
                         "rating": 0.5
@@ -368,13 +375,17 @@ class handler(BaseHTTPRequestHandler):
 
             results = []
             for _, row in df.head(15).iterrows():
-                # 欄位解析容錯處理
-                symbol = row.get('Name', row.get('Symbol', ''))
-                desc = row.get('Description', '')
+                # TVS 有時將代號放 Name，有時放 Symbol
+                symbol = str(row.get('Name', row.get('Symbol', ''))).split(':')[-1]
+                desc = row.get('Description', symbol)
+                
+                # 台股名稱優化
+                if market_param == 'TW' and symbol in TW_STOCK_NAMES:
+                    desc = TW_STOCK_NAMES[symbol]
+                
                 price = get_field(row, ['Price'], 0)
                 change = get_field(row, ['Change %', 'change_abs_percent'], 0)
                 
-                # Technical Rating 可能回傳字串或數值
                 raw_rating = row.get('Technical Rating', row.get('rating', 0))
                 rating = 0
                 if isinstance(raw_rating, str):
