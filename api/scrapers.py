@@ -8,10 +8,15 @@ def get_field(data, keys, default=0):
     for k in keys:
         if k in data and data[k] is not None:
             val = data[k]
+            # Handle percentage strings from TV
             if isinstance(val, str) and '%' in val:
                 try: val = float(val.replace('%', ''))
                 except: pass
-            return val
+            # Robust float conversion
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                continue
     return default
 
 def sanitize_json(obj):
@@ -29,25 +34,26 @@ def fetch_from_yfinance(symbol):
     try:
         ticker_symbol = symbol
         if symbol.isdigit():
+            # TW stocks
             test_ticker = symbol + ".TW"
             t = yf.Ticker(test_ticker)
             info = t.info
-            if info and 'regularMarketPrice' in info:
+            if info and ('regularMarketPrice' in info or 'currentPrice' in info):
                 ticker_symbol = test_ticker
             else:
                 test_ticker = symbol + ".TWO"
                 t = yf.Ticker(test_ticker)
                 info = t.info
-                if info and 'regularMarketPrice' in info:
+                if info and ('regularMarketPrice' in info or 'currentPrice' in info):
                     ticker_symbol = test_ticker
         else:
             t = yf.Ticker(ticker_symbol)
             info = t.info
 
-        if not info or 'regularMarketPrice' not in info:
+        if not info or ('regularMarketPrice' not in info and 'currentPrice' not in info):
             return None
             
-        price = info.get('regularMarketPrice', 0)
+        price = info.get('regularMarketPrice', info.get('currentPrice', 0))
         prev_close = info.get('regularMarketPreviousClose', price)
         change = price - prev_close
         change_p = (change / prev_close * 100) if prev_close else 0
@@ -72,10 +78,20 @@ def fetch_from_yfinance(symbol):
             graham_number = math.sqrt(max(0, 22.5 * eps * bvps))
         elif eps > 0:
             graham_number = math.sqrt(max(0, 22.5 * eps * (price / 1.5)))
+
+        # Estimate F-Score/Z-Score from yfinance indicators
+        f_score_est = 4
+        if net_margin > 0: f_score_est += 1
+        if info.get('operatingCashflow', 0) > 0: f_score_est += 1
+        if info.get('returnOnAssets', 0) > 0: f_score_est += 1
+
+        z_score_est = 1.5
+        if gross_margin > 30: z_score_est += 1.0
+        if info.get('quickRatio', 0) > 1: z_score_est += 0.5
         
         return {
             "symbol": symbol,
-            "name": info.get('longName', symbol),
+            "name": info.get('longName', info.get('shortName', symbol)),
             "price": price,
             "change": change,
             "changePercent": change_p,
@@ -89,8 +105,8 @@ def fetch_from_yfinance(symbol):
             "sector": info.get('sector', '-'),
             "industry": info.get('industry', '-'),
             "exchange": info.get('exchange', 'TWSE'),
-            "fScore": 4 + (1 if net_margin > 0 else 0),
-            "zScore": (gross_margin / 20) if gross_margin else 1.5,
+            "fScore": f_score_est,
+            "zScore": z_score_est,
             "grossMargin": gross_margin,
             "netMargin": net_margin,
             "operatingMargin": operating_margin,
@@ -110,10 +126,11 @@ def process_tvs_row(row, symbol):
     # 評級邏輯: TV 可能返回字串 like 'Strong Buy'
     rec = row.get('Recommendation', 'Neutral')
     tech_score = 0
-    if 'Strong Buy' in rec: tech_score = 1
-    elif 'Buy' in rec: tech_score = 0.5
-    elif 'Strong Sell' in rec: tech_score = -1
-    elif 'Sell' in rec: tech_score = -0.5
+    if isinstance(rec, str):
+        if 'Strong Buy' in rec: tech_score = 1
+        elif 'Buy' in rec: tech_score = 0.5
+        elif 'Strong Sell' in rec: tech_score = -1
+        elif 'Sell' in rec: tech_score = -0.5
 
     # 指標轉換與補全
     atr = get_field(row, ['Average True Range (14)'], 0)
@@ -137,7 +154,7 @@ def process_tvs_row(row, symbol):
         "atr": atr,
         "atr_p": atr_p,
         "vwap": get_field(row, ['Volume Weighted Average Price'], price),
-        "fScore": get_field(row, ['Piotroski F-Score (TTM)'], 0),
+        "fScore": get_field(row, ['Piotroski F-Score (TTM)', 'Piotroski F-Score'], 0),
         "eps": eps,
         "sector": row.get('Sector', '-'),
         "industry": row.get('Industry', '-'),

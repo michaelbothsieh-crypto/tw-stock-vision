@@ -11,7 +11,7 @@ interface PortfolioItem {
     symbol: string
     entry_price: number | string
     entry_date: string
-    current_price: string | null
+    current_price: string | number | null
 }
 
 interface PortfolioManagerProps {
@@ -101,7 +101,15 @@ export function PortfolioManager({ isOpen, onClose }: PortfolioManagerProps) {
             if (result.status === "success") {
                 toast.success(`已加入 ${newSymbol.toUpperCase()}，買入價格: ${result.price}`)
                 setNewSymbol("")
-                fetchUserPortfolio()
+                // Proactively update local state to avoid delay
+                const newItem: PortfolioItem = {
+                    id: result.id,
+                    symbol: newSymbol.trim().toUpperCase(),
+                    entry_price: result.price,
+                    entry_date: new Date().toISOString(),
+                    current_price: result.price
+                }
+                setItems(prev => [newItem, ...prev])
                 window.dispatchEvent(new Event("refresh-leaderboard"))
             } else {
                 toast.error(result.error || "加入失敗")
@@ -291,7 +299,7 @@ export function PortfolioManager({ isOpen, onClose }: PortfolioManagerProps) {
                                                                 <div className="text-right">
                                                                     <div className="text-[9px] text-zinc-600 font-bold uppercase">買入成本</div>
                                                                     <div className="text-sm font-mono font-bold text-zinc-300">
-                                                                        <span className="text-xs mr-0.5">$</span>{item.entry_price}
+                                                                        <span className="text-xs mr-0.5">$</span>{typeof item.entry_price === 'string' ? parseFloat(item.entry_price).toLocaleString() : item.entry_price.toLocaleString()}
                                                                     </div>
                                                                 </div>
                                                                 <button

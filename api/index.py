@@ -63,16 +63,21 @@ class handler(BaseHTTPRequestHandler):
                 user_id, symbol, price = data.get('user_id'), data.get('symbol'), data.get('price')
                 entry_date = data.get('entry_date') # Optional
                 
+                # Normalize symbol
+                symbol = re.sub(r'\.TW[O]?$', '', symbol.strip(), flags=re.IGNORECASE).upper()
+                
                 # If price is not provided, fetch current price automatically
                 if price is None or price <= 0:
                     price = self._fetch_price_internal(symbol) or 0
                 
                 if entry_date:
-                    cur.execute("INSERT INTO portfolio_items (user_id, symbol, entry_price, entry_date) VALUES (%s, %s, %s, %s)", (user_id, symbol, price, entry_date))
+                    cur.execute("INSERT INTO portfolio_items (user_id, symbol, entry_price, entry_date) VALUES (%s, %s, %s, %s) RETURNING id", (user_id, symbol, price, entry_date))
                 else:
-                    cur.execute("INSERT INTO portfolio_items (user_id, symbol, entry_price, entry_date) VALUES (%s, %s, %s, NOW())", (user_id, symbol, price))
+                    cur.execute("INSERT INTO portfolio_items (user_id, symbol, entry_price, entry_date) VALUES (%s, %s, %s, NOW()) RETURNING id", (user_id, symbol, price))
+                
+                res_id = cur.fetchone()[0]
                 conn.commit()
-                self.wfile.write(json.dumps({"status": "success", "price": price}).encode('utf-8'))
+                self.wfile.write(json.dumps({"status": "success", "id": res_id, "price": price}).encode('utf-8'))
 
             elif action == 'delete_portfolio':
                 u_id, p_id = data.get('user_id'), data.get('portfolio_id')
@@ -94,8 +99,23 @@ class handler(BaseHTTPRequestHandler):
             
             elif action == 'get_portfolio':
                 user_id = data.get('user_id')
-                cur.execute("SELECT p.id, p.symbol, p.entry_price, p.entry_date, s.data->>'price' as current_price FROM portfolio_items p LEFT JOIN stock_cache s ON p.symbol = s.symbol WHERE p.user_id = %s ORDER BY p.entry_date DESC", (user_id,))
-                self.wfile.write(json.dumps(cur.fetchall(), default=str).encode('utf-8'))
+                # Use RealDictCursor to return objects
+                from psycopg2.extras import RealDictCursor
+                dict_cur = conn.cursor(cursor_factory=RealDictCursor)
+                dict_cur.execute("""
+                    SELECT 
+                        p.id, 
+                        p.symbol, 
+                        p.entry_price, 
+                        p.entry_date, 
+                        s.data->>'price' as current_price 
+                    FROM portfolio_items p 
+                    LEFT JOIN stock_cache s ON p.symbol = s.symbol 
+                    WHERE p.user_id = %s 
+                    ORDER BY p.entry_date DESC
+                """, (user_id,))
+                self.wfile.write(json.dumps(dict_cur.fetchall(), default=str).encode('utf-8'))
+                dict_cur.close()
 
             cur.close()
             return_db_connection(conn)
@@ -109,13 +129,46 @@ class handler(BaseHTTPRequestHandler):
         try:
             from psycopg2.extras import RealDictCursor
             cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT u.nickname, p.id as portfolio_id, p.user_id, p.symbol, p.entry_price, p.entry_date, s.data->>'price' as current_price FROM portfolio_items p JOIN users u ON p.user_id = u.id LEFT JOIN stock_cache s ON p.symbol = s.symbol ORDER BY p.entry_date DESC LIMIT 20")
+            cur.execute("""
+                SELECT 
+                    u.nickname, 
+                    p.id as portfolio_id, 
+                    p.user_id, 
+                    p.symbol, 
+                    p.entry_price, 
+                    p.entry_date, 
+                    s.data->>'price' as current_price 
+                FROM portfolio_items p 
+                JOIN users u ON p.user_id = u.id 
+                LEFT JOIN stock_cache s ON p.symbol = s.symbol 
+                ORDER BY p.entry_date DESC 
+                LIMIT 50
+            """)
             rows, results = cur.fetchall(), []
             for row in rows:
-                curr = float(row['current_price']) if row['current_price'] else 0
-                entry = float(row['entry_price'])
-                ret = ((curr - entry) / entry) * 100 if curr > 0 else 0
-                results.append({"id": row['portfolio_id'], "user_id": str(row['user_id']), "nickname": row['nickname'], "symbol": row['symbol'], "entry_price": row['entry_price'], "return": ret, "date": row['entry_date']})
+                try:
+                    curr = float(row['current_price']) if row['current_price'] else 0
+                    entry = float(row['entry_price']) if row['entry_price'] else 0
+                    
+                    if entry <= 0:
+                        ret = 0
+                    else:
+                        # 績效計算: (現值 - 成本) / 成本 * 100
+                        # 如果 current_price 為 0 (快取過期)，績效先顯示為 0 或使用 entry_price (平盤)
+                        ret = ((curr - entry) / entry) * 100 if curr > 0 else 0
+                    
+                    results.append({
+                        "id": row['portfolio_id'], 
+                        "user_id": str(row['user_id']), 
+                        "nickname": row['nickname'], 
+                        "symbol": row['symbol'], 
+                        "entry_price": entry, 
+                        "current_price": curr,
+                        "return": round(ret, 2), 
+                        "date": row['entry_date']
+                    })
+                except:
+                    continue
             self.wfile.write(json.dumps(results, default=str).encode('utf-8'))
             cur.close()
         finally: return_db_connection(conn)
@@ -195,18 +248,26 @@ class handler(BaseHTTPRequestHandler):
                 raw_row = df.iloc[0].to_dict()
                 data = process_tvs_row(raw_row, symbol)
                 
-                # 回填: 若目標價或評級仍為 0, 使用 yfinance 補齊
-                if not data.get('targetPrice') or data.get('technicalRating') == 0:
+                # 回填與補件邏輯: 
+                # 當 technicalRating 為 0, 或關鍵數據缺失時 (fScore, zScore, grahamNumber), 使用 yfinance 補齊
+                needs_fallback = (
+                    data.get('technicalRating') == 0 or 
+                    data.get('fScore', 0) == 0 or 
+                    data.get('zScore', 0) < 0.1 or 
+                    data.get('grahamNumber', 0) == 0
+                )
+                
+                if needs_fallback:
                     yf_f = fetch_from_yfinance(symbol)
                     if yf_f:
+                        # 補齊目標價、評級與財務三率
                         if not data.get('targetPrice'): data['targetPrice'] = yf_f.get('targetPrice', 0)
                         if data.get('technicalRating') == 0: data['technicalRating'] = yf_f.get('technicalRating', 0)
-                        # 補齊財務三率
-                        data.update({
-                            "grossMargin": yf_f.get('grossMargin', 0),
-                            "netMargin": yf_f.get('netMargin', 0),
-                            "operatingMargin": yf_f.get('operatingMargin', 0)
-                        })
+                        
+                        # 合併 yfinance 到缺失的欄位
+                        for key in ['fScore', 'zScore', 'grossMargin', 'netMargin', 'operatingMargin', 'grahamNumber', 'eps']:
+                            if not data.get(key) or data.get(key) == 0:
+                                data[key] = yf_f.get(key, 0)
 
             if data:
                 # 生成雷達圖數據 (Scoring)
@@ -248,26 +309,55 @@ class handler(BaseHTTPRequestHandler):
         try:
             ss = StockScreener()
             ss.set_markets(tvs.Market.TAIWAN)
-            # 設定過濾條件：選擇台股並按技術評分排序
             ss.select(StockField.NAME, StockField.DESCRIPTION, StockField.PRICE, StockField.CHANGE_PERCENT, StockField.TECHNICAL_RATING)
             ss.sort_by(StockField.TECHNICAL_RATING, ascending=False)
             df = ss.get()
             
             if df.empty:
-                self.wfile.write(json.dumps([]).encode('utf-8'))
+                # Fallback to a few popular stocks if TV fails
+                popular_symbols = ["2330", "2317", "2454", "2603", "2881"]
+                results = []
+                for sym in popular_symbols:
+                    price = self._fetch_price_internal(sym)
+                    results.append({
+                        "symbol": sym,
+                        "description": TW_STOCK_NAMES.get(sym, "台灣績優股"),
+                        "price": price,
+                        "changePercent": 0,
+                        "rating": 0.5
+                    })
+                self.wfile.write(json.dumps(results).encode('utf-8'))
                 return
 
             results = []
             for _, row in df.head(15).iterrows():
+                # 欄位解析容錯處理
+                symbol = row.get('Name', row.get('Symbol', ''))
+                desc = row.get('Description', '')
+                price = get_field(row, ['Price'], 0)
+                change = get_field(row, ['Change %', 'change_abs_percent'], 0)
+                
+                # Technical Rating 可能回傳字串或數值
+                raw_rating = row.get('Technical Rating', row.get('rating', 0))
+                rating = 0
+                if isinstance(raw_rating, str):
+                    if 'Strong Buy' in raw_rating: rating = 1
+                    elif 'Buy' in raw_rating: rating = 0.5
+                    elif 'Sell' in raw_rating: rating = -0.5
+                    elif 'Strong Sell' in raw_rating: rating = -1
+                else:
+                    try: rating = float(raw_rating)
+                    except: rating = 0
+
                 results.append({
-                    "symbol": row.get('Name', ''),
-                    "description": row.get('Description', ''),
-                    "price": float(row.get('Price', 0)),
-                    "changePercent": float(row.get('Change %', 0)),
-                    "rating": float(row.get('Technical Rating', 0))
+                    "symbol": symbol,
+                    "description": desc,
+                    "price": price,
+                    "changePercent": change,
+                    "rating": rating
                 })
             
-            self.wfile.write(json.dumps(results).encode('utf-8'))
+            self.wfile.write(json.dumps(sanitize_json(results)).encode('utf-8'))
         except Exception as e:
             self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
 
