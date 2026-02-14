@@ -61,11 +61,13 @@ def get_db_connection():
         if not db_pool:
             try:
                 from psycopg2 import pool
+                # Parse URL or use directly. For Neon, the URL is usually sufficient as the DSN.
+                # Avoid passing redundant sslmode if already in URL.
+                db_url = os.environ['DATABASE_URL']
                 db_pool = pool.ThreadedConnectionPool(
                     1, 20,
-                    os.environ['DATABASE_URL'],
-                    sslmode='require',
-                    connect_timeout=3
+                    db_url,
+                    connect_timeout=10
                 )
                 print("Database connection pool created.")
                 db_fail_count = 0
@@ -76,7 +78,7 @@ def get_db_connection():
                     print("Disabling DB attempts (Circuit Breaker).")
                     db_alive = False
                 try:
-                    return psycopg2.connect(os.environ['DATABASE_URL'], connect_timeout=3)
+                    return psycopg2.connect(db_url, connect_timeout=10)
                 except:
                     return None
     
@@ -135,10 +137,14 @@ def init_db():
             """)
             conn.commit()
             cur.close()
+            print("Database initialized successfully.")
         finally:
             return_db_connection(conn)
     except Exception as e:
         print(f"init_db failed: {e}")
+
+# Call init_db at module level to ensure tables exist in serverless environment
+init_db()
 
 def fetch_from_yfinance(symbol):
     """Fallback to yfinance for stock data"""
