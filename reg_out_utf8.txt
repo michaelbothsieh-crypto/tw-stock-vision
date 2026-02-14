@@ -1,0 +1,49 @@
+﻿
+[REGRESSION TEST] Checking 2330...
+python : Traceback (most recent ca
+ll last):
+位於 線路:1 字元:1
++ python verify_regression.py > re
+g_out.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
+    + CategoryInfo          : Not 
+   Specified: (Traceback (most r  
+  ecent call last)::String) [],   
+  RemoteException
+    + FullyQualifiedErrorId : Nat 
+   iveCommandError
+ 
+  File "C:\Users\Michael\.gemini\a
+ntigravity\scratch\tw-stock-vision
+\verify_regression.py", line 43, i
+n verify_regression
+    print("\u2713 TVS Result obtai
+ned")
+UnicodeEncodeError: 'cp950' codec 
+can't encode character '\u2713' in
+ position 0: illegal multibyte seq
+uence
+
+During handling of the above excep
+tion, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Michael\.gemini\a
+ntigravity\scratch\tw-stock-vision
+\verify_regression.py", line 97, i
+n <module>
+    results = [verify_regression(s
+) for s in test_symbols]
+               ^^^^^^^^^^^^^^^^^^^
+^
+  File "C:\Users\Michael\.gemini\a
+ntigravity\scratch\tw-stock-vision
+\verify_regression.py", line 45, i
+n verify_regression
+    print(f"\u26a0 TVS error: {e}"
+)
+UnicodeEncodeError: 'cp950' codec 
+can't encode character '\u26a0' in
+ position 0: illegal multibyte seq
+uence

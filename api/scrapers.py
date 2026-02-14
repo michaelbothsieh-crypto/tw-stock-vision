@@ -147,17 +147,20 @@ def process_tvs_row(row, symbol):
     eps = get_field(row, ['Basic EPS (TTM)', 'EPS Diluted (TTM)'], 0)
     
     # 評級邏輯: TV 可能返回字串 like 'Strong Buy'
-    rec = row.get('Recommendation', 'Neutral')
-    tech_score = 0
-    if isinstance(rec, str):
-        if 'Strong Buy' in rec: tech_score = 1
-        elif 'Buy' in rec: tech_score = 0.5
-        elif 'Strong Sell' in rec: tech_score = -1
-        elif 'Sell' in rec: tech_score = -0.5
-
     # 指標轉換與補全
-    atr = get_field(row, ['Average True Range (14)'], 0)
+    atr = get_field(row, ['Average True Range (14)', StockField.AVERAGE_TRUE_RANGE_14.label], 0)
     atr_p = (atr / price * 100) if price > 0 else 0
+
+    # 評級邏輯：優先使用數值型，否則回退到字串轉換
+    tech_rating = get_field(row, ['Technical Rating', StockField.TECHNICAL_RATING.label], None)
+    if tech_rating is None:
+        rec = row.get('Recommendation', 'Neutral')
+        tech_rating = 0
+        if isinstance(rec, str):
+            if 'Strong Buy' in rec: tech_rating = 1
+            elif 'Buy' in rec: tech_rating = 0.5
+            elif 'Strong Sell' in rec: tech_rating = -1
+            elif 'Sell' in rec: tech_rating = -0.5
 
     data = {
         "symbol": symbol,
@@ -167,8 +170,9 @@ def process_tvs_row(row, symbol):
         "changePercent": get_field(row, ['Change %'], 0),
         "volume": get_field(row, ['Volume'], 0),
         "marketCap": get_field(row, ['Market Capitalization'], 0),
-        "technicalRating": tech_score,
-        "targetPrice": get_field(row, ['Price Target Mean', 'Price Target Median'], 0),
+        "technicalRating": tech_rating,
+        "analystRating": get_field(row, ['Analyst Rating', StockField.RECOMMENDATION_MARK.label], 3),
+        "targetPrice": get_field(row, ['Target Price (Average)', 'Price Target Mean', StockField.PRICE_TARGET_AVERAGE.label], 0),
         "sma50": get_field(row, ['Simple Moving Average (50)'], price),
         "sma200": get_field(row, ['Simple Moving Average (200)'], price),
         "rsi": get_field(row, ['Relative Strength Index (14)'], 50),

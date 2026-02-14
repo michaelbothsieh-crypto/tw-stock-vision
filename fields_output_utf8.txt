@@ -1,0 +1,13 @@
+﻿
+--- 2330 Raw Data ---
+Key: [Symbol], Value: [TWSE:2330]
+Key: [Name], Value: [2330]
+Key: [Technical Rating], Value: [0.4666666666666667]
+Key: [Analyst Rating], Value: [1.107843]
+Key: [Target Price (Average)], Value: [72.72148372333]
+Key: [Update Mode], Value: [delayed_streaming_900]
+
+--- Field Labels ---
+TECHNICAL_RATING: Technical Rating
+RECOMMENDATION_MARK: Analyst Rating
+PRICE_TARGET_AVERAGE: Target Price (Average)

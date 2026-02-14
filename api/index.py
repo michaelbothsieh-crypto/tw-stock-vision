@@ -243,7 +243,7 @@ class handler(BaseHTTPRequestHandler):
                        StockField.SIMPLE_MOVING_AVERAGE_50, StockField.SIMPLE_MOVING_AVERAGE_200,
                        StockField.PIOTROSKI_F_SCORE_TTM, StockField.BASIC_EPS_TTM, StockField.RECOMMENDATION_MARK,
                        StockField.GROSS_MARGIN_TTM, StockField.OPERATING_MARGIN_TTM, StockField.NET_MARGIN_TTM,
-                       StockField.ALTMAN_Z_SCORE_TTM, StockField.GRAHAM_NUMBERS_TTM)
+                       StockField.ALTMAN_Z_SCORE_TTM, StockField.GRAHAM_NUMBERS_TTM, StockField.PRICE_TARGET_AVERAGE)
             df = ss.get()
             
             # 如果精確搜尋失敗且是台股，嘗試模糊搜尋
@@ -269,7 +269,7 @@ class handler(BaseHTTPRequestHandler):
                         # 融合：將 yf 的關鍵財務指標併入 tv 資料
                         # 包含 HealthCheck 所需的所有欄位
                         keys_to_merge = [
-                            'fScore', 'zScore', 'grahamNumber', 'eps', 'targetPrice', 'technicalRating',
+                            'fScore', 'zScore', 'grahamNumber', 'eps', 'targetPrice', 'technicalRating', 'analystRating',
                             'grossMargin', 'netMargin', 'operatingMargin', 'revGrowth', 'epsGrowth',
                             'peRatio', 'pegRatio', 'sma20', 'sma50', 'sma200', 'rsi', 'atr_p'
                         ]

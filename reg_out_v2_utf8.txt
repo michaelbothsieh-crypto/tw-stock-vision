@@ -1,0 +1,50 @@
+﻿python : HTTP Error 404: {"quoteSu
+mmary":{"result":null,"error":{"co
+de":"Not Found","description":"Quo
+te not found for symbol: 1915.TW"}
+}}
+位於 線路:1 字元:1
++ python verify_regression.py > re
+g_out_v2.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : Not 
+   Specified: (HTTP Error 404:..  
+  .ol: 1915.TW"}}}:String) [],    
+ RemoteException
+    + FullyQualifiedErrorId : Nat 
+   iveCommandError
+ 
+$1915.TW: possibly delisted; no pr
+ice data found  (period=1d) (Yahoo
+ error = "No data found, symbol ma
+y be delisted")
+HTTP Error 404: {"quoteSummary":{"
+result":null,"error":{"code":"Not 
+Found","description":"Quote not fo
+und for symbol: 1915.TWO"}}}
+$1915.TWO: possibly delisted; no p
+rice data found  (period=1d) (Yaho
+o error = "No data found, symbol m
+ay be delisted")
+
+[REGRESSION TEST] Checking 2330...
+[INFO] TVS Result obtained
+...Fallback to yfinance
+  + Merged fScore from yf
+  + Merged zScore from yf
+  + Merged grahamNumber from yf
+  + Merged targetPrice from yf
+  Final Data Check:
+    - fScore: 9
+    - zScore: 2.5
+    - grahamNumber: 558.1
+    - analystRating: 1.107843
+    - targetPrice: 2250.0
+[SUCCESS] REGRESSION PASSED
+
+[REGRESSION TEST] Checking 1915...
+...Fallback to yfinance
+[ERROR] REGRESSION FAILED: No data object returned for 1915
+
+=== REGRESSION FAILED ===

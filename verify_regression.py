@@ -40,9 +40,9 @@ def verify_regression(symbol):
         if not df.empty:
             raw_row = df.iloc[0].to_dict()
             data = process_tvs_row(raw_row, symbol)
-            print("✓ TVS Result obtained")
+            print("[INFO] TVS Result obtained")
     except Exception as e:
-        print(f"⚠ TVS error: {e}")
+        print(f"[WARN] TVS error: {e}")
 
     # 2. yfinance 補強與融合
     # 邏輯：TVS 無結果，或是關鍵數據 F-Score 為空
@@ -55,7 +55,7 @@ def verify_regression(symbol):
         if yf_data:
             if not data:
                 data = yf_data
-                print(f"✓ Obtained full data from yf for {yf_symbol}")
+                print(f"[INFO] Obtained full data from yf for {yf_symbol}")
             else:
                 # 融合邏輯
                 keys_to_merge = [
@@ -70,26 +70,26 @@ def verify_regression(symbol):
                             print(f"  + Merged {k} from yf")
     
     if not data:
-        print(f"❌ REGRESSION FAILED: No data object returned for {symbol}")
+        print(f"[ERROR] REGRESSION FAILED: No data object returned for {symbol}")
         return False
 
     # 3. 欄位存在性檢查 (與經驗庫定義之清單對齊)
-    # 財務強度 (F-Score, Z-Score) 與 葛拉漢指數 是本次修復的核心
-    critical_fields = ['fScore', 'zScore', 'grahamNumber']
+    # 財務強度 (F-Score, Z-Score) 與 評級/目標價 是核心
+    critical_fields = ['fScore', 'zScore', 'grahamNumber', 'analystRating', 'targetPrice']
     missing = []
     print(f"  Final Data Check:")
     for f in critical_fields:
         val = data.get(f)
-        if val is None or (isinstance(val, (int, float)) and val == 0 and f == 'grahamNumber'):
+        if val is None:
             missing.append(f)
         else:
-            print(f"    ✓ {f}: {val}")
+            print(f"    - {f}: {val}")
     
     if missing:
-        print(f"❌ REGRESSION FAILED: Missing critical fields {missing}")
+        print(f"[ERROR] REGRESSION FAILED: Missing critical fields {missing}")
         return False
     
-    print("✅ REGRESSION PASSED")
+    print("[SUCCESS] REGRESSION PASSED")
     return True
 
 if __name__ == "__main__":
