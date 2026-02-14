@@ -27,10 +27,10 @@ export function MarketExplorer({ onSelectStock }: MarketExplorerProps) {
         try {
             const res = await fetch("/api/market/trending")
             const data = await res.json()
-            if (Array.isArray(data)) {
-                setTrending(data)
-                setLastUpdated(new Date())
-            }
+            // 如果後端回傳的是物件且包含 results 欄位
+            const results = Array.isArray(data) ? data : (data.results || [])
+            setTrending(results)
+            setLastUpdated(new Date())
         } catch (error) {
             console.error("Failed to fetch trending:", error)
         } finally {

@@ -265,9 +265,17 @@ class handler(BaseHTTPRequestHandler):
                         data = yf_data
                     else:
                         # 融合：將 yf 的關鍵財務指標併入 tv 資料
-                        for k in ['fScore', 'zScore', 'grahamNumber', 'eps', 'targetPrice', 'technicalRating']:
+                        # 包含 HealthCheck 所需的所有欄位
+                        keys_to_merge = [
+                            'fScore', 'zScore', 'grahamNumber', 'eps', 'targetPrice', 'technicalRating',
+                            'grossMargin', 'netMargin', 'operatingMargin', 'revGrowth', 'epsGrowth',
+                            'peRatio', 'pegRatio', 'sma20', 'sma50', 'sma200', 'rsi', 'atr_p'
+                        ]
+                        for k in keys_to_merge:
                             if not data.get(k) or data.get(k) == 0:
-                                data[k] = yf_data.get(k, 0)
+                                val = yf_data.get(k)
+                                if val is not None:
+                                    data[k] = val
 
             if data:
                 price = data.get('price', 1)

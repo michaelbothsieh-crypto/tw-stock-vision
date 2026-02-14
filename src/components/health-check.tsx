@@ -152,12 +152,12 @@ export function HealthCheck({ data }: HealthCheckProps) {
                                             </Tooltip>
                                         </TooltipProvider>
                                     </div>
-                                    <span className={cn("font-mono font-bold text-xl", getNum(data.fScore) > 0 ? getScoreColor(getNum(data.fScore), 9) : "text-zinc-500")}>
-                                        {getNum(data.fScore) > 0 ? getNum(data.fScore) : "-"} <span className="text-xs font-normal text-zinc-600">/ 9</span>
+                                    <span className={cn("font-mono font-bold text-xl", data.fScore !== undefined && data.fScore !== null ? getScoreColor(getNum(data.fScore), 9) : "text-zinc-500")}>
+                                        {data.fScore !== undefined && data.fScore !== null ? getNum(data.fScore) : "-"} <span className="text-xs font-normal text-zinc-600">/ 9</span>
                                     </span>
                                 </div>
                                 <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                                    <div className={cn("h-full rounded-full transition-all duration-1000", (getNum(data.fScore) > 0 ? getScoreColor(getNum(data.fScore), 9) : "bg-zinc-700").replace('text-', 'bg-'))} style={{ width: `${(getNum(data.fScore) / 9) * 100}%` }} />
+                                    <div className={cn("h-full rounded-full transition-all duration-1000", (data.fScore !== undefined && data.fScore !== null ? getScoreColor(getNum(data.fScore), 9) : "bg-zinc-700").replace('text-', 'bg-'))} style={{ width: `${(getNum(data.fScore) / 9) * 100}%` }} />
                                 </div>
                             </div>
 
@@ -179,11 +179,11 @@ export function HealthCheck({ data }: HealthCheckProps) {
                                         </TooltipProvider>
                                     </div>
                                     <span className={cn("font-mono font-bold text-xl", getZScoreColor(zScore))}>
-                                        {zScore > 0.1 ? zScore.toFixed(2) : "-"}
+                                        {data.zScore !== undefined && data.zScore !== null && zScore !== 0 ? zScore.toFixed(2) : "-"}
                                     </span>
                                 </div>
                                 <p className="text-[10px] text-zinc-500 text-right italic">
-                                    {zScore > 2.99 ? "財務安全" : zScore > 1.81 ? "灰色地帶" : zScore > 0.1 ? "財務預警" : "數據缺失"}
+                                    {data.zScore !== undefined && data.zScore !== null && zScore !== 0 ? (zScore > 2.99 ? "財務安全" : zScore > 1.81 ? "灰色地帶" : "財務預警") : "數據缺失"}
                                 </p>
                             </div>
                         </div>
@@ -204,7 +204,7 @@ export function HealthCheck({ data }: HealthCheckProps) {
                                 {valuation.text}
                             </div>
                             <div className="text-[9px] text-zinc-500 uppercase">
-                                葛拉漢合理價 <span className="font-mono text-zinc-400">{grahamNumber > 1 ? `$${grahamNumber.toFixed(1)}` : "數據缺失"}</span>
+                                葛拉漢合理價 <span className="font-mono text-zinc-400">{data.grahamNumber !== undefined && data.grahamNumber !== null && grahamNumber > 0.1 ? `$${grahamNumber.toFixed(1)}` : "數據缺失"}</span>
                             </div>
                         </div>
 
