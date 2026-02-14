@@ -202,8 +202,8 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">一年預測目標</div>
-                                    <div className="text-3xl font-black font-mono text-zinc-100 italic tracking-tighter">
-                                        {(data.targetPrice || 0).toFixed(1)}
+                                    <div className="text-3xl font-black font-mono text-zinc-100">
+                                        {data.targetPrice && data.targetPrice > 0 ? data.targetPrice.toFixed(1) : "--"}
                                     </div>
                                 </div>
 
