@@ -42,16 +42,30 @@ class handler(BaseHTTPRequestHandler):
 
             if action == 'register_user':
                 nickname, user_id = data.get('nickname'), data.get('id')
-                if not nickname or not user_id:
-                    self.wfile.write(json.dumps({"error": "Missing params"}).encode('utf-8'))
+                if not user_id:
+                    self.wfile.write(json.dumps({"error": "Missing ID"}).encode('utf-8'))
                     return
-                cur.execute("SELECT id FROM users WHERE id = %s", (user_id,))
-                if cur.fetchone():
-                    cur.execute("UPDATE users SET nickname = %s WHERE id = %s", (nickname, user_id))
-                else:
-                    cur.execute("INSERT INTO users (id, nickname) VALUES (%s, %s)", (user_id, nickname))
-                conn.commit()
-                self.wfile.write(json.dumps({"status": "success", "user": {"id": user_id, "nickname": nickname}}).encode('utf-8'))
+                # UPSERT logic: Insert id and nickname. If id exists, update nickname.
+                # If nickname exists for ANOTHER id, this will handle via DB unique constraint if applicable.
+                try:
+                    cur.execute("""
+                        INSERT INTO users (id, nickname) 
+                        VALUES (%s, %s) 
+                        ON CONFLICT (id) DO UPDATE SET nickname = EXCLUDED.nickname
+                        RETURNING id, nickname
+                    """, (user_id, nickname))
+                    res = cur.fetchone()
+                    conn.commit()
+                    self.wfile.write(json.dumps({"status": "success", "user": {"id": str(res[0]), "nickname": res[1]}}).encode('utf-8'))
+                except Exception as e:
+                    conn.rollback()
+                    self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+
+            elif action == 'list_users':
+                cur.execute("SELECT id, nickname FROM users ORDER BY created_at DESC LIMIT 50")
+                rows = cur.fetchall()
+                users = [{"id": str(r[0]), "nickname": r[1]} for r in rows]
+                self.wfile.write(json.dumps({"status": "success", "users": users}).encode('utf-8'))
 
             elif action == 'update_nickname':
                 user_id, nickname = data.get('user_id'), data.get('nickname')

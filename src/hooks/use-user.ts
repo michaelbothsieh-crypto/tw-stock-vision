@@ -17,9 +17,7 @@ export function useUser() {
 
     const register = async (nickname: string) => {
         try {
-            // Generate a random ID if we don't have one (though typically we are registering a NEW user)
             const newId = crypto.randomUUID()
-
             const res = await fetch('/api/index', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -29,7 +27,6 @@ export function useUser() {
                 })
             })
             const data = await res.json()
-
             if (data.status === 'success' && data.user) {
                 localStorage.setItem('tw_stock_user', JSON.stringify(data.user))
                 setUser(data.user)
@@ -45,5 +42,48 @@ export function useUser() {
         return null
     }
 
-    return { user, loading, register }
+    const loginWithId = async (id: string) => {
+        try {
+            const res = await fetch('/api/index', {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'register_user',
+                    id,
+                    nickname: 'Recovered User' // Backend will handle if user exists
+                })
+            })
+            const data = await res.json()
+
+            if (data.status === 'success' && data.user) {
+                localStorage.setItem('tw_stock_user', JSON.stringify(data.user))
+                setUser(data.user)
+                toast.success(`帳號恢復成功, ${data.user.nickname}!`)
+                return data.user
+            } else {
+                throw new Error(data.error || "找不到該帳號")
+            }
+        } catch (e) {
+            console.error(e)
+            toast.error("恢復失敗: " + String(e))
+            return null
+        }
+    }
+
+    const fetchUsers = async () => {
+        try {
+            const res = await fetch('/api/index', {
+                method: 'POST',
+                body: JSON.stringify({ action: 'list_users' })
+            })
+            const data = await res.json()
+            if (data.status === 'success') {
+                return data.users as { id: string, nickname: string }[]
+            }
+        } catch (e) {
+            console.error("Failed to fetch users:", e)
+        }
+        return []
+    }
+
+    return { user, loading, register, loginWithId, fetchUsers }
 }
