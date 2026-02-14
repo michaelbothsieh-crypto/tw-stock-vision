@@ -235,16 +235,19 @@ class handler(BaseHTTPRequestHandler):
 
         conn = get_db_connection()
         if conn:
-            cur = conn.cursor()
-            cur.execute("SELECT data FROM stock_cache WHERE symbol = %s AND updated_at > NOW() - INTERVAL '1 hour'", (symbol,))
-            row = cur.fetchone()
-            if row:
-                self._set_headers()
-                self.wfile.write(json.dumps(row[0]).encode('utf-8'))
+            # 加入 flush 支援：若 query 中有 flush=true 則跳過緩存讀取
+            do_flush = q.get('flush', ['false'])[0].lower() == 'true'
+            if not do_flush:
+                cur = conn.cursor()
+                cur.execute("SELECT data FROM stock_cache WHERE symbol = %s AND updated_at > NOW() - INTERVAL '1 hour'", (symbol,))
+                row = cur.fetchone()
+                if row:
+                    self._set_headers()
+                    self.wfile.write(json.dumps(row[0]).encode('utf-8'))
+                    cur.close()
+                    return_db_connection(conn)
+                    return
                 cur.close()
-                return_db_connection(conn)
-                return
-            cur.close()
             return_db_connection(conn)
 
         self._set_headers()
@@ -287,48 +290,51 @@ class handler(BaseHTTPRequestHandler):
                     if not data: 
                         data = yf_data
                     else:
-                        # 融合：將 yf 的關鍵財務指標併入 tv 資料
-                        keys_to_merge = [
-                            'fScore', 'zScore', 'grahamNumber', 'eps', 'targetPrice', 'technicalRating', 'analystRating',
-                            'grossMargin', 'netMargin', 'operatingMargin', 'revGrowth', 'epsGrowth',
-                            'peRatio', 'pegRatio', 'sma20', 'sma50', 'sma200', 'rsi', 'atr_p', 'marketCap',
-                            'roe', 'roa', 'debtToEquity', 'revGrowth', 'netGrowth', 'yield'
-                        ]
-                        # 更新判斷邏輯：使用 re 保障美股代號不被誤判
-                        is_tw = bool(re.match(r'^\d+$', symbol))
-                        for k in keys_to_merge:
-                            yf_val = yf_data.get(k)
-                            if yf_val is None:
-                                continue
+                        # 2. 獲取 yfinance 資料後，先檢查「現價一致性」
+                        yf_price = yf_data.get('price', 0)
+                        tvs_price = data.get('price', 0)
+                        
+                        # 現價強一致校驗：若兩者價差 > 50%，視為誤抓不同市場標的 (如 2337 誤抓 ADR)，應整組捨棄
+                        if yf_price > 0 and tvs_price > 0 and abs(yf_price - tvs_price) / tvs_price > 0.5:
+                            print(f"[Data Leak Prevention] Dropping yf data for {symbol}: yf_p={yf_price} vs tvs_p={tvs_price}")
+                        else:
+                            keys_to_merge = [
+                                'fScore', 'zScore', 'grahamNumber', 'eps', 'targetPrice', 'technicalRating', 'analystRating',
+                                'grossMargin', 'netMargin', 'operatingMargin', 'revGrowth', 'epsGrowth',
+                                'peRatio', 'pegRatio', 'sma20', 'sma50', 'sma200', 'rsi', 'atr_p', 'marketCap',
+                                'roe', 'roa', 'debtToEquity', 'revGrowth', 'netGrowth', 'yield'
+                            ]
+                            for k in keys_to_merge:
+                                yf_val = yf_data.get(k)
+                                if yf_val is None:
+                                    continue
 
-                            # 針對目標價 (targetPrice) 實施嚴格異常攔截
-                            if k == 'targetPrice':
-                                curr_p = data.get('price', 1)
-                                tvs_val = data.get(k, 0)
-                                
-                                # 異常識別：若 yf 數值與現價偏離超過 50%
-                                is_yf_extreme = (yf_val > 0 and curr_p > 0 and abs(yf_val - curr_p) / curr_p > 0.5)
-                                # 若 TVS 數值與現價偏離超過 50% (通常是單位錯誤，如美金 vs 台幣)
-                                is_tvs_extreme = (tvs_val > 0 and curr_p > 0 and abs(tvs_val - curr_p) / curr_p > 0.5)
+                                # 針對目標價 (targetPrice) 實施嚴格異常攔截
+                                if k == 'targetPrice':
+                                    curr_p = data.get('price', 1)
+                                    tvs_val = data.get(k, 0)
+                                    
+                                    # 異常識別：若 yf 數值與現價偏離超過 50%
+                                    is_yf_extreme = (yf_val > 0 and curr_p > 0 and abs(yf_val - curr_p) / curr_p > 0.5)
+                                    # 若 TVS 數值與現價偏離超過 50% (通常是單位錯誤，如美金 vs 台幣)
+                                    is_tvs_extreme = (tvs_val > 0 and curr_p > 0 and abs(tvs_val - curr_p) / curr_p > 0.5)
 
-                                # 邏輯 A：如果 yf 數值極度異常，且 TVS 已經有一個更合理的目標價或是 yf 跟現價比太扯，則攔截
-                                if is_yf_extreme:
-                                    if not is_tvs_extreme and tvs_val > 0:
-                                        continue # 保留 TVS，捨棄異常 yf
-                                    # 如果兩邊都極端或 TVS 沒資料，則強行壓回現價或不更新
-                                    if abs(yf_val - curr_p) / curr_p > 1.0: # 超過一倍，絕對是誤抓
-                                        continue
+                                    # 邏輯 A：如果 yf 數值極度異常，且 TVS 已經有一個更合理的目標價或是 yf 跟現價比太扯，則攔截
+                                    if is_yf_extreme:
+                                        if not is_tvs_extreme and tvs_val > 0:
+                                            continue # 保留 TVS，捨棄異常 yf
+                                        # 如果兩邊都極端或 TVS 沒資料，則強行壓回現價或不更新
+                                        if abs(yf_val - curr_p) / curr_p > 1.0: # 超過一倍，絕對是誤抓
+                                            continue
+                                    
+                                    # 邏輯 B：決定是否覆蓋
+                                    if is_tvs_extreme or tvs_val == 0 or is_tw:
+                                        if not is_yf_extreme:
+                                            data[k] = yf_val
                                 
-                                # 邏輯 B：決定是否覆蓋
-                                # 如果 TVS 異常(單位錯) 或 TVS 沒資料，才考慮採用 yf
-                                if is_tvs_extreme or tvs_val == 0 or is_tw:
-                                    # 再次檢查 yf 是否合理，不合理則不採用
-                                    if not is_yf_extreme:
-                                        data[k] = yf_val
-                            
-                            # 其他一般欄位補件
-                            elif data.get(k) is None or data.get(k) == 0:
-                                data[k] = yf_val
+                                # 其他一般欄位補件 (ROE, ROA, Debt, etc.)
+                                elif data.get(k) is None or data.get(k) == 0:
+                                    data[k] = yf_val
 
             if data:
                 price = data.get('price', 1)

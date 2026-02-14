@@ -132,41 +132,52 @@ def fetch_from_yfinance(symbol):
         eps = info.get('trailingEps', info.get('forwardEps', info.get('epsTrailingTwelveMonths', 0))) or 0
         bvps = info.get('bookValue', 0) or 0
         
+        # 獲利指標單一化 (*100)
+        roe = (info.get('returnOnEquity', 0) or 0) * 100
+        roa = (info.get('returnOnAssets', 0) or 0) * 100
+        rev_growth = (info.get('revenueGrowth', 0) or 0) * 100
+        debt_ratio = (info.get('debtToEquity', 0) or 0) # yf 的 debtToEquity 通常已經是 100 基準，如 18.18
+        
         # 市值處理
         raw_mcap = info.get('marketCap', 0)
-        # 精確判定：純數字或帶有特定尾碼視為台股
         is_tw_mkt = bool(re.match(r'^\d+$', symbol)) or symbol.endswith('.TW') or symbol.endswith('.TWO')
         formatted_mcap = format_market_cap(raw_mcap, is_tw=is_tw_mkt)
 
-        # 目標價：精準映射 yfinance 的多個可能欄位
+        # 目標價
         target_price = info.get('targetMedianPrice', info.get('targetMeanPrice', info.get('targetLowPrice', price * 1.1)))
 
         # F-Score 邏輯加強
         f_score = 3
         if net_margin > 0: f_score += 1
-        if info.get('returnOnAssets', 0) > 0: f_score += 1
+        if roa > 0: f_score += 1
         if info.get('operatingCashflow', 0) > 0: f_score += 1
-        if info.get('returnOnEquity', 0) > 10: f_score += 1
-        if info.get('revenueGrowth', 0) > 0: f_score += 1
+        if roe > 10: f_score += 1
+        if rev_growth > 0: f_score += 1
 
         z_score = 1.0
         if info.get('currentRatio', 0) > 1.2: z_score += 1.0
-        if info.get('debtToEquity', 100) < 60: z_score += 1.0
+        if debt_ratio < 60: z_score += 1.0
         
-        # 合理價 (Graham) 退卻邏輯：若 EPS 異常，則採用類似 P/B 的估值
+        # 估值邏輯
         graham = 0
         if eps > 0 and bvps > 0:
             graham = math.sqrt(22.5 * eps * bvps)
-        else:
-            # 退卻：採用淨值估法 (假設最低 1.2 倍淨值)
-            graham = bvps * 1.5 if bvps > 0 else (price * 0.8)
 
         return {
             "symbol": symbol,
-            "name": info.get('longName', info.get('shortName', symbol)),
+            "name": info.get('longName', TW_STOCK_NAMES.get(symbol, symbol)),
             "price": price,
-            "changePercent": change_p,
+            "changePercent": round(change_p, 2),
+            "volume": info.get('regularMarketVolume', info.get('volume', 0)),
             "marketCap": formatted_mcap,
+            "grossMargin": round(gross_margin, 2),
+            "netMargin": round(net_margin, 2),
+            "operatingMargin": round(operating_margin, 2),
+            "eps": eps,
+            "roe": round(roe, 2),
+            "roa": round(roa, 2),
+            "debtToEquity": round(debt_ratio, 2),
+            "revGrowth": round(rev_growth, 2),
             "technicalRating": 0.5 if price > info.get('fiftyDayAverage', price) else -0.5,
             "analystRating": info.get('recommendationMean', 3),
             "targetPrice": target_price,
@@ -175,13 +186,11 @@ def fetch_from_yfinance(symbol):
             "fScore": min(9, f_score),
             "zScore": round(z_score, 2),
             "grahamNumber": round(graham, 2),
-            "eps": eps,
             "source": "yfinance"
         }
     except Exception as e:
         print(f"yfinance error: {e}")
         return None
-    except Exception as e:
         print(f"yfinance error: {e}")
         return None
     except Exception as e:
