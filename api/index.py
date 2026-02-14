@@ -375,11 +375,15 @@ class handler(BaseHTTPRequestHandler):
 
             results = []
             for _, row in df.head(15).iterrows():
-                # TVS 有時將代號放 Name，有時放 Symbol
-                symbol = str(row.get('Name', row.get('Symbol', ''))).split(':')[-1]
-                desc = row.get('Description', symbol)
+                # 優化代號抓取：優先取 Name ( ticker )，若無則取 Symbol 去除交易所
+                raw_name = str(row.get('Name', ''))
+                raw_symbol = str(row.get('Symbol', ''))
                 
-                # 台股名稱優化
+                # 台股 TVS 通常 Name 是代號，Symbol 是 EXCHANGE:TICKER
+                symbol = raw_name if raw_name.isdigit() else raw_symbol.split(':')[-1]
+                if not symbol: symbol = raw_symbol
+                
+                desc = row.get('Description', symbol)
                 if market_param == 'TW' and symbol in TW_STOCK_NAMES:
                     desc = TW_STOCK_NAMES[symbol]
                 
@@ -405,7 +409,9 @@ class handler(BaseHTTPRequestHandler):
                     "rating": rating
                 })
             
-            self.wfile.write(json.dumps(sanitize_json(results)).encode('utf-8'))
+            # 兼容性封裝：同時回傳列表與物件格式
+            output = sanitize_json(results)
+            self.wfile.write(json.dumps(output).encode('utf-8'))
         except Exception as e:
             self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
 

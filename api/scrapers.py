@@ -91,44 +91,47 @@ def fetch_from_yfinance(symbol):
         if not info or ('regularMarketPrice' not in info and 'currentPrice' not in info and 'longName' not in info):
             return None
             
-        price = info.get('regularMarketPrice', info.get('currentPrice', info.get('previousClose', 0)))
+        # 強化指標抓取
+        price = info.get('regularMarketPrice', info.get('currentPrice', info.get('previousClose', info.get('ask', 0))))
         prev_close = info.get('regularMarketPreviousClose', info.get('previousClose', price))
-        change = price - prev_close
-        change_p = (change / prev_close * 100) if prev_close else 0
+        change_p = ((price - prev_close) / prev_close * 100) if prev_close else 0
         
-        sma50 = info.get('fiftyDayAverage', price)
-        sma200 = info.get('twoHundredDayAverage', price)
-        momentum = 0.5 if price > sma50 else -0.5
-        
+        # 財務指標
         gross_margin = (info.get('grossMargins', 0) or 0) * 100
         net_margin = (info.get('profitMargins', 0) or 0) * 100
         operating_margin = (info.get('operatingMargins', 0) or 0) * 100
-
         eps = info.get('trailingEps', info.get('forwardEps', info.get('epsTrailingTwelveMonths', 0))) or 0
         bvps = info.get('bookValue', 0) or 0
         
-        graham_number = math.sqrt(max(0, 22.5 * eps * bvps)) if eps > 0 and bvps > 0 else (price * 0.85)
+        # 目標價：精準映射 yfinance 的多個可能欄位
+        target_price = info.get('targetMedianPrice', info.get('targetMeanPrice', info.get('targetLowPrice', price * 1.1)))
 
-        f_score_est = 3
-        if net_margin > 0: f_score_est += 2
-        if info.get('returnOnAssets', 0) > 0: f_score_est += 2
-        if info.get('operatingCashflow', 0) > 0: f_score_est += 2
+        # F-Score 邏輯加強
+        f_score = 3
+        if net_margin > 0: f_score += 1
+        if info.get('returnOnAssets', 0) > 0: f_score += 1
+        if info.get('operatingCashflow', 0) > 0: f_score += 1
+        if info.get('returnOnEquity', 0) > 10: f_score += 1
+        if info.get('revenueGrowth', 0) > 0: f_score += 1
 
-        z_score_est = 1.0 + (0.5 if info.get('currentRatio', 0) > 1.5 else 0) + (1.0 if info.get('debtToEquity', 100) < 50 else 0)
+        z_score = 1.0
+        if info.get('currentRatio', 0) > 1.2: z_score += 1.0
+        if info.get('debtToEquity', 100) < 60: z_score += 1.0
         
         return {
             "symbol": symbol,
             "name": info.get('longName', info.get('shortName', symbol)),
             "price": price,
             "changePercent": change_p,
-            "technicalRating": momentum,
+            "technicalRating": 0.5 if price > info.get('fiftyDayAverage', price) else -0.5,
             "analystRating": info.get('recommendationMean', 3),
-            "targetPrice": info.get('targetMedianPrice', info.get('targetMeanPrice', price * 1.1)),
-            "sma50": sma50,
-            "sma200": sma200,
-            "fScore": min(9, f_score_est),
-            "zScore": round(z_score_est, 2),
-            "grahamNumber": round(graham_number, 2),
+            "targetPrice": target_price,
+            "sma50": info.get('fiftyDayAverage', price),
+            "sma200": info.get('twoHundredDayAverage', price),
+            "fScore": min(9, f_score),
+            "zScore": round(z_score, 2),
+            "grahamNumber": round(math.sqrt(max(0, 22.5 * eps * bvps)) if eps > 0 and bvps > 0 else (price * 0.85), 2),
+            "eps": eps,
             "source": "yfinance"
         }
     except Exception as e:
