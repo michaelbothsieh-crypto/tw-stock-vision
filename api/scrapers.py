@@ -55,9 +55,22 @@ def format_market_cap(val, is_tw=True):
 
 def fetch_from_yfinance(symbol):
     try:
-        ticker_symbol = symbol
-        info = None
-        if symbol.isdigit():
+        # 強制台股代號 (4位數字) 加上 .TW 後綴，確保抓取精確度
+        yf_symbol = symbol
+        if re.match(r'^\d{4}$', symbol):
+            yf_symbol = f"{symbol}.TW"
+        
+        # 如果 symbol 已經有 .TW/.TWO 則保留
+        elif re.search(r'\.TW[O]?$', symbol, re.IGNORECASE):
+            yf_symbol = symbol.upper()
+
+        ticker_symbol = yf_symbol
+        ticker = yf.Ticker(yf_symbol)
+        info = ticker.info
+
+        # If initial fetch with yf_symbol (potentially .TW added) failed, and original symbol was a digit,
+        # try the original .TW/.TWO fallback logic.
+        if (not info or ('regularMarketPrice' not in info and 'currentPrice' not in info and 'longName' not in info)) and symbol.isdigit():
             # TW stocks - Try .TW first, then .TWO
             for suffix in [".TW", ".TWO"]:
                 test_ticker = symbol + suffix

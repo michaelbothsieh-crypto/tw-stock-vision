@@ -297,21 +297,38 @@ class handler(BaseHTTPRequestHandler):
                         # 更新判斷邏輯：使用 re 保障美股代號不被誤判
                         is_tw = bool(re.match(r'^\d+$', symbol))
                         for k in keys_to_merge:
-                            # 針對目標價 (targetPrice)，如果是台股、或者 yf 有資料且 TVS 異常，則採用 yf
-                            force_yf = False
-                            # 若 yf 價格更合理（例如 TVS 回傳的是美金但台股現價是台幣），則強制採用 yf
+                            yf_val = yf_data.get(k)
+                            if yf_val is None:
+                                continue
+
+                            # 針對目標價 (targetPrice) 實施嚴格異常攔截
                             if k == 'targetPrice':
-                                tvs_val = data.get(k, 0)
-                                yf_val = yf_data.get(k, 0)
                                 curr_p = data.get('price', 1)
-                                if is_tw or (yf_val > 0 and (tvs_val == 0 or abs(tvs_val - curr_p) / curr_p > 0.5)):
-                                    force_yf = True
+                                tvs_val = data.get(k, 0)
+                                
+                                # 異常識別：若 yf 數值與現價偏離超過 50%
+                                is_yf_extreme = (yf_val > 0 and curr_p > 0 and abs(yf_val - curr_p) / curr_p > 0.5)
+                                # 若 TVS 數值與現價偏離超過 50% (通常是單位錯誤，如美金 vs 台幣)
+                                is_tvs_extreme = (tvs_val > 0 and curr_p > 0 and abs(tvs_val - curr_p) / curr_p > 0.5)
+
+                                # 邏輯 A：如果 yf 數值極度異常，且 TVS 已經有一個更合理的目標價或是 yf 跟現價比太扯，則攔截
+                                if is_yf_extreme:
+                                    if not is_tvs_extreme and tvs_val > 0:
+                                        continue # 保留 TVS，捨棄異常 yf
+                                    # 如果兩邊都極端或 TVS 沒資料，則強行壓回現價或不更新
+                                    if abs(yf_val - curr_p) / curr_p > 1.0: # 超過一倍，絕對是誤抓
+                                        continue
+                                
+                                # 邏輯 B：決定是否覆蓋
+                                # 如果 TVS 異常(單位錯) 或 TVS 沒資料，才考慮採用 yf
+                                if is_tvs_extreme or tvs_val == 0 or is_tw:
+                                    # 再次檢查 yf 是否合理，不合理則不採用
+                                    if not is_yf_extreme:
+                                        data[k] = yf_val
                             
-                            # 補件邏輯
-                            if force_yf or data.get(k) is None or data.get(k) == 0:
-                                val = yf_data.get(k)
-                                if val is not None:
-                                    data[k] = val
+                            # 其他一般欄位補件
+                            elif data.get(k) is None or data.get(k) == 0:
+                                data[k] = yf_val
 
             if data:
                 price = data.get('price', 1)
