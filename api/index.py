@@ -343,7 +343,7 @@ class handler(BaseHTTPRequestHandler):
                     # Check if ID exists, if so update nickname, else insert
                     cur.execute("SELECT id FROM users WHERE id = %s", (user_id,))
                     if cur.fetchone():
-                        cur.execute("UPDATE users SET nickname = %s, created_at = NOW() WHERE id = %s", (nickname, user_id))
+                        cur.execute("UPDATE users SET nickname = %s WHERE id = %s", (nickname, user_id))
                     else:
                         cur.execute("INSERT INTO users (id, nickname) VALUES (%s, %s)", (user_id, nickname))
                     conn.commit()
@@ -351,6 +351,20 @@ class handler(BaseHTTPRequestHandler):
                 except Exception as e:
                     conn.rollback()
                     print(f"DB Error during registration: {e}")
+                    self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+
+            elif action == 'update_nickname':
+                user_id = data.get('user_id')
+                nickname = data.get('nickname')
+                if not nickname or not user_id:
+                    self.wfile.write(json.dumps({"error": "Missing nickname or user_id"}).encode('utf-8'))
+                    return
+                try:
+                    cur.execute("UPDATE users SET nickname = %s WHERE id = %s", (nickname, user_id))
+                    conn.commit()
+                    self.wfile.write(json.dumps({"status": "success"}).encode('utf-8'))
+                except Exception as e:
+                    conn.rollback()
                     self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
 
             elif action == 'add_portfolio':
@@ -372,12 +386,35 @@ class handler(BaseHTTPRequestHandler):
                     conn.rollback()
                     print(f"DB Error adding portfolio: {e}")
                     self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+
+            elif action == 'delete_portfolio':
+                user_id = data.get('user_id')
+                portfolio_id = data.get('portfolio_id')
+                try:
+                    cur.execute("DELETE FROM portfolio_items WHERE id = %s AND user_id = %s", (portfolio_id, user_id))
+                    conn.commit()
+                    self.wfile.write(json.dumps({"status": "success"}).encode('utf-8'))
+                except Exception as e:
+                    conn.rollback()
+                    self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+
+            elif action == 'update_portfolio_price':
+                user_id = data.get('user_id')
+                portfolio_id = data.get('portfolio_id')
+                new_price = data.get('price')
+                try:
+                    cur.execute("UPDATE portfolio_items SET entry_price = %s WHERE id = %s AND user_id = %s", (new_price, portfolio_id, user_id))
+                    conn.commit()
+                    self.wfile.write(json.dumps({"status": "success"}).encode('utf-8'))
+                except Exception as e:
+                    conn.rollback()
+                    self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
             
             # Fetch user portfolio
             elif action == 'get_portfolio':
                 user_id = data.get('user_id')
                 cur.execute("""
-                    SELECT p.symbol, p.entry_price, p.entry_date, s.data->>'price' as current_price
+                    SELECT p.id, p.symbol, p.entry_price, p.entry_date, s.data->>'price' as current_price
                     FROM portfolio_items p
                     LEFT JOIN stock_cache s ON p.symbol = s.symbol
                     WHERE p.user_id = %s
@@ -407,7 +444,7 @@ class handler(BaseHTTPRequestHandler):
         try:
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("""
-                SELECT u.nickname, p.symbol, p.entry_price, p.entry_date, s.data->>'price' as current_price
+                SELECT u.nickname, p.id as portfolio_id, p.user_id, p.symbol, p.entry_price, p.entry_date, s.data->>'price' as current_price
                 FROM portfolio_items p
                 JOIN users u ON p.user_id = u.id
                 LEFT JOIN stock_cache s ON p.symbol = s.symbol
@@ -421,8 +458,11 @@ class handler(BaseHTTPRequestHandler):
                 entry = float(row['entry_price'])
                 ret = ((curr - entry) / entry) * 100 if curr > 0 else 0
                 results.append({
+                    "id": row['portfolio_id'],
+                    "user_id": str(row['user_id']),
                     "nickname": row['nickname'],
                     "symbol": row['symbol'],
+                    "entry_price": row['entry_price'],
                     "return": ret,
                     "date": row['entry_date']
                 })
@@ -598,14 +638,26 @@ class handler(BaseHTTPRequestHandler):
                 # Heuristic Z-Score based on margins
                 z_score = max(0.5, (gross_margin / 20) + (net_margin / 10))
             
+            # Graham Number calculation
             graham_number = get_field(data, ["Graham's Number", "Graham Number", "Graham Numbers (TTM)"], 0)
-            if not is_us_stock and graham_number == 0 and eps > 0:
+            if not is_us_stock and (not graham_number or graham_number == 0) and eps > 0:
+                print(f"Graham Number missing for {symbol}, attempting manual calculation...")
                 # Graham Number = sqrt(22.5 * EPS * BVPS) 
-                # Since BVPS is often missing, use P/B as proxy or simply 22.5 * EPS * (Price/PB)
-                pb = get_field(data, ['Price to Book Ratio (TTM)'], 1.5)
-                if pb > 0:
+                pb = get_field(data, ['Price to Book Ratio (TTM)'], 0)
+                if pb == 0:
+                    # If PB missing, use yfinance fallback to find it
+                    print(f"PB missing for {symbol}, trying yfinance...")
+                    yf_f = yf.Ticker(symbol + ".TW" if symbol.isdigit() else symbol)
+                    try:
+                        pb = yf_f.info.get('priceToBook', 1.5)
+                        if eps == 0: eps = yf_f.info.get('trailingEps', 0)
+                    except: pb = 1.5 
+                
+                if pb > 0 and eps > 0:
                     bvps = price / pb
                     graham_number = math.sqrt(max(0, 22.5 * eps * bvps))
+                else:
+                    print(f"Still unable to calculate Graham for {symbol}: EPS={eps}, PB={pb}")
 
             smc_score = 0
             if rvol > 1.5: smc_score += 30

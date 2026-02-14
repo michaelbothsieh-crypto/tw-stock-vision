@@ -4,13 +4,16 @@ import { useState, useEffect } from "react"
 import { Search } from "lucide-react"
 import { StockDashboard } from "@/components/stock-dashboard"
 import { Leaderboard } from "@/components/leaderboard"
+import { PortfolioManager } from "@/components/portfolio-manager"
 import { useUser } from "@/hooks/use-user"
+import { Settings } from "lucide-react"
 
 export default function Home() {
     const [query, setQuery] = useState("")
     const [stockData, setStockData] = useState(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [isManagerOpen, setIsManagerOpen] = useState(false)
     const { user, register } = useUser()
 
     const searchStock = async (e: React.FormEvent) => {
@@ -112,14 +115,28 @@ export default function Home() {
 
                         {/* User Profile Card (Mini) */}
                         {user && (
-                            <div className="p-4 rounded-2xl bg-zinc-900/50 border border-zinc-800">
-                                <div className="text-xs text-zinc-500 uppercase font-bold mb-2">My Profile</div>
+                            <div className="p-4 rounded-2xl bg-zinc-900/50 border border-zinc-800 group">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div className="text-xs text-zinc-500 uppercase font-bold">My Profile</div>
+                                    <button
+                                        onClick={() => setIsManagerOpen(true)}
+                                        className="p-1 px-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-yellow-500 transition-colors flex items-center gap-1.5 text-[10px]"
+                                    >
+                                        <Settings className="h-3 w-3" />
+                                        管理紀錄
+                                    </button>
+                                </div>
                                 <div className="font-bold text-lg">{user.nickname}</div>
                                 <div className="text-xs text-zinc-400 mt-1">ID: {user.id.slice(0, 8)}...</div>
                             </div>
                         )}
                     </div>
                 </div>
+
+                <PortfolioManager
+                    isOpen={isManagerOpen}
+                    onClose={() => setIsManagerOpen(false)}
+                />
 
             </div>
         </main>
