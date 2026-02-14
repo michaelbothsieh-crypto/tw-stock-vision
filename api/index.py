@@ -3,6 +3,7 @@ from urllib.parse import urlparse, parse_qs
 import json
 import re
 import os
+import math
 import tvscreener as tvs
 from tvscreener import StockScreener, StockField
 
@@ -279,33 +280,35 @@ class handler(BaseHTTPRequestHandler):
             
             # 如果精確搜尋失敗且是台股，嘗試模糊搜尋
             if df.empty and is_tw:
-                ss = StockScreener()
-                ss.set_markets(tvs.Market.TAIWAN)
-                df_all = ss.get()
+                print(f"[Search Fallback] Precise search failed for {symbol}, trying fuzzy match...")
+                ss_fuzzy = StockScreener()
+                ss_fuzzy.set_markets(tvs.Market.TAIWAN)
+                df_all = ss_fuzzy.get()
                 if not df_all.empty:
-                    df = df_all[df_all['Name'].str.contains(symbol, na=False) | df_all['Description'].str.contains(symbol, na=False)]
+                    mask = (df_all['Description'].str.contains(symbol, na=False, case=False)) | \
+                           (df_all['Name'].str.contains(symbol, na=False, case=False))
+                    df = df_all[mask]
 
             data = None
             if not df.empty:
                 raw_row = df.iloc[0].to_dict()
-                data = process_tvs_row(raw_row, symbol)
+                # 重要：獲取正確的代號，否則 yfinance 會抓不到
+                actual_symbol = raw_row.get('Name', symbol)
+                data = process_tvs_row(raw_row, actual_symbol)
+                symbol = actual_symbol # 更新為代號
                 
-            # 如果仍無數據或關鍵缺失，由 yfinance 深度補件
-            # 如果仍無數據、關鍵缺失，或 fScore 未達標，由 yfinance 深度補件
-            # 放寬條件：若資料缺失或 fScore 太低，皆觸發 yf 補全
+            # 如果仍無數據、關鍵缺失、或 fScore 太低，由 yfinance 補件
             if not data or data.get('fScore', 0) < 5 or data.get('eps') is None:
                 yf_data = fetch_from_yfinance(symbol)
                 if yf_data:
                     if not data: 
                         data = yf_data
                     else:
-                        # 2. 獲取 yfinance 資料後，先檢查「現價一致性」
                         yf_price = yf_data.get('price', 0)
                         tvs_price = data.get('price', 0)
                         
-                        # 現價強一致校驗：若兩者價差 > 50%，視為誤抓不同市場標的 (如 2337 誤抓 ADR)，應整組捨棄
                         if yf_price > 0 and tvs_price > 0 and abs(yf_price - tvs_price) / tvs_price > 0.5:
-                            print(f"[Data Leak Prevention] Dropping yf data for {symbol}: yf_p={yf_price} vs tvs_p={tvs_price}")
+                            print(f"[Data Leak Prevention] Dropping yf data for {symbol}")
                         else:
                             keys_to_merge = [
                                 'fScore', 'zScore', 'grahamNumber', 'eps', 'targetPrice', 'technicalRating', 'analystRating',
@@ -346,19 +349,33 @@ class handler(BaseHTTPRequestHandler):
                                     data[k] = yf_val
 
             if data:
+                # --- 核心強化：財經體質標籤 (Health Label) ---
+                roe = data.get('roe', 0)
+                z_score = data.get('zScore', 0)
+                debt = data.get('debtToEquity', 100)
+                
+                health_label = "普"
+                if roe > 15 and z_score > 2.5: health_label = "優"
+                elif roe > 8 and z_score > 1.2: health_label = "良"
+                elif roe < 0 or z_score < 0.5 or debt > 150: health_label = "差"
+                data['healthLabel'] = health_label
+
+                # --- 核心強化：成長預測 (Growth Projection) ---
+                rev_g = data.get('revGrowth', 0)
+                f_score = data.get('fScore', 0)
+                projection = "持平"
+                if rev_g > 20 and f_score >= 6: projection = "高速成長"
+                elif rev_g > 5: projection = "溫和成長"
+                elif rev_g < -10: projection = "衰退警戒"
+                data['growthProjection'] = projection
+
                 price = data.get('price', 1)
-                data['current_price'] = price
-                # 雷達圖：深度整合財務指標
-                # 1. 安全：結合 F-Score 與 Debt/Equity (負債越低越安全)
+                # 雷達圖算法優化
                 safe_val = (data.get('fScore', 3) * 10) + max(0, 30 - data.get('debtToEquity', 100) / 4)
-                # 2. 動能：結合 Technical Rating 與 Revenue Growth
                 momentum_val = 50 + (data.get('technicalRating', 0) * 30) + (data.get('revGrowth', 0) * 0.5)
-                # 3. 價值：Graham Number 折價程度 + 毛利率加權
                 value_val = (data.get('grahamNumber', 0) / price * 60) + (data.get('grossMargin', 0) * 0.4) if price > 0 else 50
-                # 4. 趨勢：與均線距離 (SMA50/200 交叉)
                 trend_val = 50 + ((price - data.get('sma50', price)) / max(1, data.get('sma50', 1)) * 150)
-                # 5. 規模：市值權重 (大盤股加分)
-                mcap_score = 40 + (math.log10(max(1e9, data.get('marketCap', 0))) / 12 * 40) if isinstance(data.get('marketCap'), (int, float)) else 60
+                mcap_score = 40 + (math.log10(max(1e9, data.get('marketCap', 1e9))) / 12 * 40) if isinstance(data.get('marketCap'), (int, float)) else 60
 
                 data['radarData'] = [
                     {"subject": "動能", "A": max(15, min(100, momentum_val)), "desc": "結合技術強弱與營收成長"},
@@ -367,19 +384,25 @@ class handler(BaseHTTPRequestHandler):
                     {"subject": "安全", "A": max(15, min(100, safe_val)), "desc": "財務結構與債信評估"},
                     {"subject": "價值", "A": max(15, min(100, value_val)), "desc": "合理價折價與利潤空間"}
                 ]
-                # AI 預測區間 (對齊前端 PredictionCard 必要欄位)
-                atr = data.get('atr', data['price'] * 0.02)
+                
+                t_price = data.get('targetPrice', 0)
+                if t_price > 0:
+                    upside = ((t_price - price) / price) * 100
+                    data['upside'] = round(upside, 2)
+
+                # AI 預測區間
+                atr = data.get('atr', price * 0.02)
                 data['prediction'] = {
-                    "confidence": "中 (68%)",
-                    "upper": data['price'] + (atr * 2),
-                    "lower": data['price'] - (atr * 2),
+                    "confidence": "中 (68%)" if data.get('fScore', 0) > 4 else "低 (45%)",
+                    "upper": price + (atr * 2),
+                    "lower": price - (atr * 2),
                     "days": 14
                 }
                 
                 self._save_to_cache(symbol, data)
                 self.wfile.write(json.dumps(sanitize_json(data)).encode('utf-8'))
             else:
-                self.wfile.write(json.dumps({"error": "Symbol not found"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"error": "Unable to fetch data", "symbol": symbol}).encode('utf-8'))
         except Exception as e:
             self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
 

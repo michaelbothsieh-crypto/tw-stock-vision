@@ -47,5 +47,8 @@ export interface StockData {
     roa?: number
     debtToEquity?: number
     yield?: number
-    netGrowth?: number
+    netGrowth?: number;
+    healthLabel?: string;
+    growthProjection?: string;
+    upside?: number;
 }

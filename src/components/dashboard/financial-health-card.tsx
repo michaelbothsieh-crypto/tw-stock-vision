@@ -29,11 +29,29 @@ export function FinancialHealthCard({ data }: FinancialHealthCardProps) {
     return (
         <div className="rounded-3xl border border-border/50 bg-black/20 p-6 shadow-xl backdrop-blur-sm relative overflow-hidden group">
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="absolute top-0 right-0 p-4">
+                {data.healthLabel && (
+                    <div className={cn(
+                        "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter shadow-lg border",
+                        data.healthLabel === "優" ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/50" :
+                            data.healthLabel === "良" ? "bg-blue-500/20 text-blue-400 border-blue-500/50" :
+                                data.healthLabel === "普" ? "bg-zinc-500/20 text-zinc-400 border-zinc-500/50" :
+                                    "bg-rose-500/20 text-rose-400 border-rose-500/50"
+                    )}>
+                        體質{data.healthLabel}
+                    </div>
+                )}
+            </div>
 
             <div className="relative z-10 space-y-6">
                 <div className="flex justify-between items-center">
                     <h3 className="text-xs md:text-sm font-bold text-zinc-400 uppercase tracking-[0.12em] flex items-center gap-2">
                         <Activity className="h-4 w-4 text-indigo-400" /> 財務體質深度分析
+                        {data.growthProjection && (
+                            <span className="ml-2 px-2 py-0.5 rounded bg-zinc-800 text-[10px] text-zinc-500 font-mono">
+                                趨勢: {data.growthProjection}
+                            </span>
+                        )}
                     </h3>
                 </div>
 
