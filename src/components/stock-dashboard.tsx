@@ -167,10 +167,10 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                     </div>
                     <div className={cn("flex flex-col items-end text-right", isPositive ? "text-emerald-400" : "text-rose-400")}>
                         <h3 className="text-sm font-medium text-muted-foreground mb-1">即時報價</h3>
-                        <span className="text-6xl font-bold font-mono tracking-tighter shadow-glow">{data.price.toFixed(2)}</span>
+                        <span className="text-6xl font-bold font-mono tracking-tighter shadow-glow">{(Number(data.price) || 0).toFixed(2)}</span>
                         <div className="flex items-center gap-2 text-xl font-medium mt-1">
-                            <span>{isPositive ? "▲" : "▼"} {Math.abs(data.change).toFixed(2)}</span>
-                            <span className="opacity-80">({Math.abs(data.changePercent).toFixed(2)}%)</span>
+                            <span>{isPositive ? "▲" : "▼"} {(Number(data.change) || 0).toFixed(2)}</span>
+                            <span className="opacity-80">({(Number(data.changePercent) || 0).toFixed(2)}%)</span>
                         </div>
                     </div>
                 </div>
@@ -188,7 +188,7 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                                 <InfoTooltip content={STOCK_DEFINITIONS["分析師評語"]} />
                             </div>
                             <span className={cn("px-2 py-0.5 rounded text-xs", (data.targetPrice || 0) > data.price ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-500/20")}>
-                                {data.targetPrice ? `${(((data.targetPrice) - data.price) / data.price * 100).toFixed(1)}% Upside` : "- % Upside"}
+                                {data.targetPrice && data.price ? `${(((data.targetPrice) - data.price) / data.price * 100).toFixed(1)}% Upside` : "- % Upside"}
                             </span>
                         </div>
                         <div className="flex items-center justify-between gap-4">

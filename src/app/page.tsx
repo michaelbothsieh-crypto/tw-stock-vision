@@ -5,6 +5,7 @@ import { Search } from "lucide-react"
 import { StockDashboard } from "@/components/stock-dashboard"
 import { Leaderboard } from "@/components/leaderboard"
 import { PortfolioManager } from "@/components/portfolio-manager"
+import { MarketExplorer } from "@/components/dashboard/market-explorer"
 import { useUser } from "@/hooks/use-user"
 import { Settings } from "lucide-react"
 
@@ -109,8 +110,26 @@ export default function Home() {
                         <StockDashboard data={stockData} loading={loading} error={error} />
                     </div>
 
-                    {/* Right: Leaderboard */}
+                    {/* Right: Leaderboard & Explorer */}
                     <div className="space-y-6">
+                        <div className="h-[450px]">
+                            <MarketExplorer onSelectStock={async (s) => {
+                                setQuery(s);
+                                setLoading(true);
+                                setError(null);
+                                setStockData(null);
+                                try {
+                                    const res = await fetch(`/api/stock?symbol=${encodeURIComponent(s)}`);
+                                    const data = await res.json();
+                                    if (data.error) throw new Error(data.error);
+                                    setStockData(data);
+                                } catch (err) {
+                                    setError("無法切換標的");
+                                } finally {
+                                    setLoading(false);
+                                }
+                            }} />
+                        </div>
                         <Leaderboard />
 
                         {/* User Profile Card (Mini) */}

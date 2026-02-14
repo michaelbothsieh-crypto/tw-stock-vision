@@ -243,10 +243,39 @@ class handler(BaseHTTPRequestHandler):
             cur.close()
         finally: return_db_connection(conn)
 
+    def _handle_market_trending(self):
+        self._set_headers()
+        try:
+            ss = StockScreener()
+            ss.set_markets(tvs.Market.TAIWAN)
+            # 設定過濾條件：選擇台股並按技術評分排序
+            ss.select(StockField.NAME, StockField.DESCRIPTION, StockField.PRICE, StockField.CHANGE_PERCENT, StockField.TECHNICAL_RATING)
+            ss.sort_by(StockField.TECHNICAL_RATING, ascending=False)
+            df = ss.get()
+            
+            if df.empty:
+                self.wfile.write(json.dumps([]).encode('utf-8'))
+                return
+
+            results = []
+            for _, row in df.head(15).iterrows():
+                results.append({
+                    "symbol": row.get('Name', ''),
+                    "description": row.get('Description', ''),
+                    "price": float(row.get('Price', 0)),
+                    "changePercent": float(row.get('Change %', 0)),
+                    "rating": float(row.get('Technical Rating', 0))
+                })
+            
+            self.wfile.write(json.dumps(results).encode('utf-8'))
+        except Exception as e:
+            self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+
     def do_GET(self):
         parsed = urlparse(self.path)
         q = parse_qs(parsed.query)
         if 'leaderboard' in q or '/leaderboard' in parsed.path: self._handle_leaderboard()
+        elif 'trending' in q or '/market/trending' in parsed.path: self._handle_market_trending()
         elif 'symbol' in q: self._handle_stock_lookup(q['symbol'][0])
         elif parsed.path.endswith('/health'):
             self._set_headers()

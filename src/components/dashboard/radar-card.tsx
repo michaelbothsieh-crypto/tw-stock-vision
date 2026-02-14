@@ -21,7 +21,7 @@ export function RadarCard({ data }: RadarCardProps) {
                     <div key={item.subject} className="bg-background/40 p-2 rounded-xl border border-white/5">
                         <div className="flex justify-between items-center mb-1">
                             <span className="text-[10px] text-muted-foreground">{item.subject}</span>
-                            <span className="text-xs font-mono font-bold text-primary">{Math.round(item.A)}</span>
+                            <span className="text-xs font-mono font-bold text-primary">{Math.round(Number(item.A) || 0)}</span>
                         </div>
                         <div className="text-[10px] text-zinc-400 leading-tight">
                             {item.desc || "數據收集中"}

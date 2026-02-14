@@ -37,15 +37,15 @@ export function PredictionCard({ price, prediction }: PredictionCardProps) {
                 <div className="grid grid-cols-3 gap-2 text-center">
                     <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20">
                         <div className="text-xs text-emerald-400">樂觀 (Bullish)</div>
-                        <div className="font-mono font-bold">{prediction.upper.toFixed(2)}</div>
+                        <div className="font-mono font-bold">{(Number(prediction.upper) || 0).toFixed(2)}</div>
                     </div>
                     <div className="p-2 pt-4">
                         <div className="text-xs text-muted-foreground">當前</div>
-                        <div className="font-mono font-bold text-lg">{price.toFixed(2)}</div>
+                        <div className="font-mono font-bold text-lg">{(Number(price) || 0).toFixed(2)}</div>
                     </div>
                     <div className="p-2 rounded bg-rose-500/10 border border-rose-500/20">
                         <div className="text-xs text-rose-400">悲觀 (Bearish)</div>
-                        <div className="font-mono font-bold">{prediction.lower.toFixed(2)}</div>
+                        <div className="font-mono font-bold">{(Number(prediction.lower) || 0).toFixed(2)}</div>
                     </div>
                 </div>
                 <p className="text-[10px] text-center text-muted-foreground opacity-70">

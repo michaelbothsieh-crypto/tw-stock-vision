@@ -41,15 +41,15 @@ export function TechnicalEvidence({ volume, marketCap, rvol, vwap, cmf, price }:
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
             <Stat label="成交量" value={(volume || 0).toLocaleString()} />
             <Stat label="市值" value={marketCap ? formatMarketCap(marketCap) : "--"} />
-            <Stat label="RVOL (量能)" value={(rvol || 0).toFixed(2) + "x"}
-                subtext={(rvol || 0) > 1.5 ? "🔥 主力介入明顯" : (rvol || 0) > 1.0 ? "量能溫和" : "量縮整理"}
-                color={(rvol || 0) > 1.5 ? "text-amber-400" : undefined} />
-            <Stat label="VWAP" value={(vwap || 0).toFixed(2)}
-                subtext={price > (vwap || 0) ? "📈 站上均價線" : "📉 跌破均價線"}
-                color={price > (vwap || 0) ? "text-emerald-400" : "text-rose-400"} />
-            <Stat label="CMF (金流)" value={(cmf || 0).toFixed(2)}
-                subtext={(cmf || 0) > 0 ? "💰 資金流入" : "💸 資金流出"}
-                color={(cmf || 0) > 0 ? "text-emerald-400" : "text-rose-400"} />
+            <Stat label="RVOL (量能)" value={(Number(rvol) || 0).toFixed(2) + "x"}
+                subtext={(Number(rvol) || 0) > 1.5 ? "🔥 主力介入明顯" : (Number(rvol) || 0) > 1.0 ? "量能溫和" : "量縮整理"}
+                color={(Number(rvol) || 0) > 1.5 ? "text-amber-400" : undefined} />
+            <Stat label="VWAP" value={(Number(vwap) || 0).toFixed(2)}
+                subtext={Number(price) > (Number(vwap) || 0) ? "📈 站上均價線" : "📉 跌破均價線"}
+                color={Number(price) > (Number(vwap) || 0) ? "text-emerald-400" : "text-rose-400"} />
+            <Stat label="CMF (金流)" value={(Number(cmf) || 0).toFixed(2)}
+                subtext={(Number(cmf) || 0) > 0 ? "💰 資金流入" : "💸 資金流出"}
+                color={(Number(cmf) || 0) > 0 ? "text-emerald-400" : "text-rose-400"} />
         </div>
     )
 }
