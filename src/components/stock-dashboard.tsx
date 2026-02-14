@@ -13,6 +13,7 @@ import { NicknameDialog } from "./nickname-dialog"
 import { HealthCheck } from "./health-check"
 import { RadarCard } from "./dashboard/radar-card"
 import { PredictionCard } from "./dashboard/prediction-card"
+import { FinancialHealthCard } from "./dashboard/financial-health-card"
 import { TechnicalEvidence } from "./dashboard/technical-evidence"
 import { StockData } from "./dashboard/types"
 import { SECTOR_TRANSLATIONS, EXCHANGE_TRANSLATIONS } from "@/lib/constants"
@@ -183,6 +184,7 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                 <RadarCard data={data.radarData || []} />
                 <div className="flex flex-col gap-6">
                     <PredictionCard price={data.price} prediction={data.prediction} />
+                    <FinancialHealthCard data={data} />
                     <div className="flex-1 rounded-3xl border border-border/50 bg-black/20 p-6 shadow-xl backdrop-blur-sm relative overflow-hidden group/target">
                         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover/target:opacity-100 transition-opacity duration-500" />
 

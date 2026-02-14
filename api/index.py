@@ -291,7 +291,8 @@ class handler(BaseHTTPRequestHandler):
                         keys_to_merge = [
                             'fScore', 'zScore', 'grahamNumber', 'eps', 'targetPrice', 'technicalRating', 'analystRating',
                             'grossMargin', 'netMargin', 'operatingMargin', 'revGrowth', 'epsGrowth',
-                            'peRatio', 'pegRatio', 'sma20', 'sma50', 'sma200', 'rsi', 'atr_p', 'marketCap'
+                            'peRatio', 'pegRatio', 'sma20', 'sma50', 'sma200', 'rsi', 'atr_p', 'marketCap',
+                            'roe', 'roa', 'debtToEquity', 'revGrowth', 'netGrowth', 'yield'
                         ]
                         # 更新判斷邏輯：使用 re 保障美股代號不被誤判
                         is_tw = bool(re.match(r'^\d+$', symbol))
@@ -315,13 +316,24 @@ class handler(BaseHTTPRequestHandler):
             if data:
                 price = data.get('price', 1)
                 data['current_price'] = price
-                # 雷達圖：確保即使資料欠缺也有保底數值呈現 (避免 0 點)
+                # 雷達圖：深度整合財務指標
+                # 1. 安全：結合 F-Score 與 Debt/Equity (負債越低越安全)
+                safe_val = (data.get('fScore', 3) * 10) + max(0, 30 - data.get('debtToEquity', 100) / 4)
+                # 2. 動能：結合 Technical Rating 與 Revenue Growth
+                momentum_val = 50 + (data.get('technicalRating', 0) * 30) + (data.get('revGrowth', 0) * 0.5)
+                # 3. 價值：Graham Number 折價程度 + 毛利率加權
+                value_val = (data.get('grahamNumber', 0) / price * 60) + (data.get('grossMargin', 0) * 0.4) if price > 0 else 50
+                # 4. 趨勢：與均線距離 (SMA50/200 交叉)
+                trend_val = 50 + ((price - data.get('sma50', price)) / max(1, data.get('sma50', 1)) * 150)
+                # 5. 規模：市值權重 (大盤股加分)
+                mcap_score = 40 + (math.log10(max(1e9, data.get('marketCap', 0))) / 12 * 40) if isinstance(data.get('marketCap'), (int, float)) else 60
+
                 data['radarData'] = [
-                    {"subject": "動能", "A": max(15, min(100, 50 + (data.get('technicalRating', 0) * 50))), "desc": "價格相對 MA 的強度"},
-                    {"subject": "趨勢", "A": max(15, min(100, 50 + ((price - data.get('sma50', price)) / max(1, data.get('sma50', 1)) * 200))), "desc": "短期均線排列狀態"},
-                    {"subject": "關注", "A": max(15, min(100, data.get('rvol', 1) * 30)), "desc": "相對成交量異常偵測"},
-                    {"subject": "安全", "A": max(15, min(100, data.get('fScore', 3) * 11)), "desc": "Piotroski 財務評分"},
-                    {"subject": "價值", "A": max(15, min(100, (data.get('grahamNumber', 0) / price * 100) if price > 0 else 55)), "desc": "葛拉漢合理價折溢價"}
+                    {"subject": "動能", "A": max(15, min(100, momentum_val)), "desc": "結合技術強弱與營收成長"},
+                    {"subject": "趨勢", "A": max(15, min(100, trend_val)), "desc": "中短期均線排列狀態"},
+                    {"subject": "規模", "A": max(15, min(100, mcap_score)), "desc": "市場規模與資本厚度"},
+                    {"subject": "安全", "A": max(15, min(100, safe_val)), "desc": "財務結構與債信評估"},
+                    {"subject": "價值", "A": max(15, min(100, value_val)), "desc": "合理價折價與利潤空間"}
                 ]
                 # AI 預測區間 (對齊前端 PredictionCard 必要欄位)
                 atr = data.get('atr', data['price'] * 0.02)

@@ -43,4 +43,9 @@ export interface StockData {
     peRatio: number
     pegRatio: number
     grahamNumber: number
+    roe?: number
+    roa?: number
+    debtToEquity?: number
+    yield?: number
+    netGrowth?: number
 }

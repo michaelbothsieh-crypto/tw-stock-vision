@@ -13,4 +13,15 @@ __pycache__/
 .idea/
 venv/
 .gemini/
+# Testing & Debugging
+debug_*.py
+verify_*.py
+test_*.py
+diagnose_*.py
+inspect_*.py
+reproduce_*.py
+verify_*.py
+run_local_*.py
+*.py.bak
+*.log
 inspection_*.txt
