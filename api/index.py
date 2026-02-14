@@ -211,16 +211,19 @@ class handler(BaseHTTPRequestHandler):
             if data:
                 # 生成雷達圖數據 (Scoring)
                 data['radarData'] = [
-                    {"subject": "動能", "A": min(100, max(0, 50 + (data.get('technicalRating', 0) * 50)))},
-                    {"subject": "趨勢", "A": min(100, max(0, 50 + ((data.get('price', 1) - data.get('sma50', 1)) / data.get('sma50', 1) * 200)))},
-                    {"subject": "關注", "A": min(100, data.get('rvol', 1) * 30)},
-                    {"subject": "安全", "A": min(100, data.get('fScore', 5) * 11)},
-                    {"subject": "價值", "A": min(100, (data.get('grahamNumber', 0) / data.get('price', 1) * 100) if data.get('price', 0) > 0 else 50)}
+                    {"subject": "動能", "A": min(100, max(0, 50 + (data.get('technicalRating', 0) * 50))), "desc": "價格相對 MA 的強度"},
+                    {"subject": "趨勢", "A": min(100, max(0, 50 + ((data.get('price', 1) - data.get('sma50', 1)) / data.get('sma50', 1) * 200))), "desc": "短期均線排列狀態"},
+                    {"subject": "關注", "A": min(100, data.get('rvol', 1) * 30), "desc": "相對成交量異常偵測"},
+                    {"subject": "安全", "A": min(100, data.get('fScore', 5) * 11), "desc": "Piotroski 財務評分"},
+                    {"subject": "價值", "A": min(100, (data.get('grahamNumber', 0) / data.get('price', 1) * 100) if data.get('price', 0) > 0 else 50), "desc": "葛拉漢合理價折溢價"}
                 ]
-                # AI 預測區間
+                # AI 預測區間 (對齊前端 PredictionCard 必要欄位)
+                atr = data.get('atr', data['price'] * 0.02)
                 data['prediction'] = {
-                    "high": data['price'] + (data.get('atr', data['price']*0.02) * 2),
-                    "low": data['price'] - (data.get('atr', data['price']*0.02) * 2)
+                    "confidence": "中 (68%)",
+                    "upper": data['price'] + (atr * 2),
+                    "lower": data['price'] - (atr * 2),
+                    "days": 14
                 }
                 
                 self._save_to_cache(symbol, data)

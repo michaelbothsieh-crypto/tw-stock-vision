@@ -163,8 +163,13 @@ export function PortfolioManager({ isOpen, onClose }: PortfolioManagerProps) {
     }
 
     const formatDateForInput = (dateStr: string) => {
-        const d = new Date(dateStr)
-        return d.toISOString().split('T')[0]
+        try {
+            const d = new Date(dateStr)
+            if (isNaN(d.getTime())) return new Date().toISOString().split('T')[0]
+            return d.toISOString().split('T')[0]
+        } catch (e) {
+            return new Date().toISOString().split('T')[0]
+        }
     }
 
     return (
@@ -276,7 +281,7 @@ export function PortfolioManager({ isOpen, onClose }: PortfolioManagerProps) {
                                                             <div className="flex flex-col">
                                                                 <span className="text-[10px] text-zinc-500 flex items-center gap-1">
                                                                     <Calendar className="h-3 w-3" />
-                                                                    買入日期: {new Date(item.entry_date).toLocaleDateString()}
+                                                                    買入日期: {item.entry_date ? new Date(item.entry_date).toLocaleDateString() : "-"}
                                                                 </span>
                                                             </div>
                                                         </div>

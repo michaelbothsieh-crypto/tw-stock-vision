@@ -115,6 +115,10 @@ def process_tvs_row(row, symbol):
     elif 'Strong Sell' in rec: tech_score = -1
     elif 'Sell' in rec: tech_score = -0.5
 
+    # 指標轉換與補全
+    atr = get_field(row, ['Average True Range (14)'], 0)
+    atr_p = (atr / price * 100) if price > 0 else 0
+
     data = {
         "symbol": symbol,
         "name": row.get('Description', row.get('Name', symbol)),
@@ -130,7 +134,8 @@ def process_tvs_row(row, symbol):
         "rsi": get_field(row, ['Relative Strength Index (14)'], 50),
         "rvol": get_field(row, ['Relative Volume'], 1),
         "cmf": get_field(row, ['Chaikin Money Flow (20)'], 0),
-        "atr": get_field(row, ['Average True Range (14)'], 0),
+        "atr": atr,
+        "atr_p": atr_p,
         "vwap": get_field(row, ['Volume Weighted Average Price'], price),
         "fScore": get_field(row, ['Piotroski F-Score (TTM)'], 0),
         "eps": eps,
