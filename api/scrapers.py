@@ -2,6 +2,7 @@ import math
 import tvscreener as tvs
 from tvscreener import StockScreener, StockField
 import yfinance as yf
+import re
 from api.constants import TW_STOCK_NAMES, SECTOR_TRANSLATIONS, EXCHANGE_TRANSLATIONS
 
 def get_field(data, keys, default=0):
@@ -120,7 +121,8 @@ def fetch_from_yfinance(symbol):
         
         # 市值處理
         raw_mcap = info.get('marketCap', 0)
-        is_tw_mkt = symbol.isdigit() or symbol.endswith('.TW') or symbol.endswith('.TWO')
+        # 精確判定：純數字或帶有特定尾碼視為台股
+        is_tw_mkt = bool(re.match(r'^\d+$', symbol)) or symbol.endswith('.TW') or symbol.endswith('.TWO')
         formatted_mcap = format_market_cap(raw_mcap, is_tw=is_tw_mkt)
 
         # 目標價：精準映射 yfinance 的多個可能欄位
@@ -196,11 +198,9 @@ def process_tvs_row(row, symbol):
 
     # 優先嘗試從常數表獲取中文名稱 (針對台股)
     display_name = row.get('Description', row.get('Name', symbol))
-    if symbol.isdigit() and symbol in TW_STOCK_NAMES:
-        display_name = TW_STOCK_NAMES[symbol]
-
     raw_mcap = get_field(row, ['Market Capitalization'], 0)
-    formatted_mcap = format_market_cap(raw_mcap, is_tw=symbol.isdigit())
+    is_tw = bool(re.match(r'^\d+$', symbol))
+    formatted_mcap = format_market_cap(raw_mcap, is_tw=is_tw)
 
     data = {
         "symbol": symbol,

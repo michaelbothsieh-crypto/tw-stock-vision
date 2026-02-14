@@ -279,28 +279,34 @@ class handler(BaseHTTPRequestHandler):
                 data = process_tvs_row(raw_row, symbol)
                 
             # 如果仍無數據或關鍵缺失，由 yfinance 深度補件
-            if not data or data.get('fScore', 0) == 0:
+            # 如果仍無數據、關鍵缺失，或 fScore 未達標，由 yfinance 深度補件
+            # 放寬條件：若資料缺失或 fScore 太低，皆觸發 yf 補全
+            if not data or data.get('fScore', 0) < 5 or data.get('eps') is None:
                 yf_data = fetch_from_yfinance(symbol)
                 if yf_data:
                     if not data: 
                         data = yf_data
                     else:
                         # 融合：將 yf 的關鍵財務指標併入 tv 資料
-                        # 包含 HealthCheck 所需的所有欄位
                         keys_to_merge = [
                             'fScore', 'zScore', 'grahamNumber', 'eps', 'targetPrice', 'technicalRating', 'analystRating',
                             'grossMargin', 'netMargin', 'operatingMargin', 'revGrowth', 'epsGrowth',
-                            'peRatio', 'pegRatio', 'sma20', 'sma50', 'sma200', 'rsi', 'atr_p'
+                            'peRatio', 'pegRatio', 'sma20', 'sma50', 'sma200', 'rsi', 'atr_p', 'marketCap'
                         ]
-                        is_tw = symbol.isdigit()
+                        # 更新判斷邏輯：使用 re 保障美股代號不被誤判
+                        is_tw = bool(re.match(r'^\d+$', symbol))
                         for k in keys_to_merge:
-                            # 針對目標價 (targetPrice)，如果是台股或者是 TVS 數值顯然異常，則優先用 yf
-                            # 加強判斷：若台股代號且 yf 有資料，則強制 yf
+                            # 針對目標價 (targetPrice)，如果是台股、或者 yf 有資料且 TVS 異常，則採用 yf
                             force_yf = False
-                            if k == 'targetPrice' and is_tw and yf_data.get('targetPrice'):
-                                force_yf = True
+                            # 若 yf 價格更合理（例如 TVS 回傳的是美金但台股現價是台幣），則強制採用 yf
+                            if k == 'targetPrice':
+                                tvs_val = data.get(k, 0)
+                                yf_val = yf_data.get(k, 0)
+                                curr_p = data.get('price', 1)
+                                if is_tw or (yf_val > 0 and (tvs_val == 0 or abs(tvs_val - curr_p) / curr_p > 0.5)):
+                                    force_yf = True
                             
-                            # 或者原始資料無效時也補件
+                            # 補件邏輯
                             if force_yf or data.get(k) is None or data.get(k) == 0:
                                 val = yf_data.get(k)
                                 if val is not None:
