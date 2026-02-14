@@ -287,8 +287,14 @@ class handler(BaseHTTPRequestHandler):
                             'grossMargin', 'netMargin', 'operatingMargin', 'revGrowth', 'epsGrowth',
                             'peRatio', 'pegRatio', 'sma20', 'sma50', 'sma200', 'rsi', 'atr_p'
                         ]
+                        is_tw = symbol.isdigit()
                         for k in keys_to_merge:
-                            if not data.get(k) or data.get(k) == 0:
+                            # 針對目標價 (targetPrice)，如果是台股或者是 TVS 數值顯然異常，則優先用 yf
+                            force_yf = False
+                            if k == 'targetPrice' and is_tw:
+                                force_yf = True
+                            
+                            if force_yf or not data.get(k) or data.get(k) == 0:
                                 val = yf_data.get(k)
                                 if val is not None:
                                     data[k] = val
