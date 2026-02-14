@@ -87,6 +87,13 @@ export function MarketExplorer({ onSelectStock }: MarketExplorerProps) {
                     Array(5).fill(0).map((_, i) => (
                         <div key={i} className="h-16 w-full bg-zinc-800/20 animate-pulse rounded-2xl border border-white/5" />
                     ))
+                ) : trending.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-3">
+                        <div className="w-12 h-12 bg-zinc-800/50 rounded-full flex items-center justify-center border border-white/5">
+                            <Activity className="h-5 w-5 text-zinc-600" />
+                        </div>
+                        <p className="text-xs text-zinc-500 font-medium">暫無趨勢資料<br />請稍後重試</p>
+                    </div>
                 ) : (
                     <AnimatePresence mode="popLayout">
                         {trending.map((stock, index) => (
@@ -108,8 +115,8 @@ export function MarketExplorer({ onSelectStock }: MarketExplorerProps) {
                                 <div className="flex items-center gap-5">
                                     <div className="text-right">
                                         <div className="text-xs font-bold text-zinc-100 font-mono tracking-tighter">{stock.price > 0 ? stock.price.toFixed(2) : "--"}</div>
-                                        <div className={cn("text-[11px] font-bold", stock.changePercent >= 0 ? "text-emerald-400" : "text-rose-400")}>
-                                            {stock.changePercent >= 0 ? "+" : ""}{stock.changePercent.toFixed(2)}%
+                                        <div className={cn("text-[11px] font-bold", (stock.changePercent || 0) >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                                            {(stock.changePercent || 0) >= 0 ? "+" : ""}{(stock.changePercent || 0).toFixed(2)}%
                                         </div>
                                     </div>
                                     <ChevronRight className="h-4 w-4 text-zinc-700 group-hover:text-primary group-hover:translate-x-1 transition-all" />

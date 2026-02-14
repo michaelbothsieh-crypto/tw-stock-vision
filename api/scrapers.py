@@ -37,6 +37,21 @@ def sanitize_json(obj):
         return obj
     return obj
 
+def format_market_cap(val, is_tw=True):
+    """格式化市值，台股用億/兆，美股用 B/T"""
+    if not val or val == 0: return "-"
+    try:
+        if is_tw:
+            if val >= 1e12:
+                return f"{val/1e12:.2f} 兆"
+            return f"{val/1e8:.2f} 億"
+        else:
+            if val >= 1e12:
+                return f"{val/1e12:.2f} T"
+            return f"{val/1e9:.2f} B"
+    except:
+        return str(val)
+
 def fetch_from_yfinance(symbol):
     try:
         ticker_symbol = symbol
@@ -103,6 +118,11 @@ def fetch_from_yfinance(symbol):
         eps = info.get('trailingEps', info.get('forwardEps', info.get('epsTrailingTwelveMonths', 0))) or 0
         bvps = info.get('bookValue', 0) or 0
         
+        # 市值處理
+        raw_mcap = info.get('marketCap', 0)
+        is_tw_mkt = symbol.isdigit() or symbol.endswith('.TW') or symbol.endswith('.TWO')
+        formatted_mcap = format_market_cap(raw_mcap, is_tw=is_tw_mkt)
+
         # 目標價：精準映射 yfinance 的多個可能欄位
         target_price = info.get('targetMedianPrice', info.get('targetMeanPrice', info.get('targetLowPrice', price * 1.1)))
 
@@ -118,11 +138,20 @@ def fetch_from_yfinance(symbol):
         if info.get('currentRatio', 0) > 1.2: z_score += 1.0
         if info.get('debtToEquity', 100) < 60: z_score += 1.0
         
+        # 合理價 (Graham) 退卻邏輯：若 EPS 異常，則採用類似 P/B 的估值
+        graham = 0
+        if eps > 0 and bvps > 0:
+            graham = math.sqrt(22.5 * eps * bvps)
+        else:
+            # 退卻：採用淨值估法 (假設最低 1.2 倍淨值)
+            graham = bvps * 1.5 if bvps > 0 else (price * 0.8)
+
         return {
             "symbol": symbol,
             "name": info.get('longName', info.get('shortName', symbol)),
             "price": price,
             "changePercent": change_p,
+            "marketCap": formatted_mcap,
             "technicalRating": 0.5 if price > info.get('fiftyDayAverage', price) else -0.5,
             "analystRating": info.get('recommendationMean', 3),
             "targetPrice": target_price,
@@ -130,7 +159,7 @@ def fetch_from_yfinance(symbol):
             "sma200": info.get('twoHundredDayAverage', price),
             "fScore": min(9, f_score),
             "zScore": round(z_score, 2),
-            "grahamNumber": round(math.sqrt(max(0, 22.5 * eps * bvps)) if eps > 0 and bvps > 0 else (price * 0.85), 2),
+            "grahamNumber": round(graham, 2),
             "eps": eps,
             "source": "yfinance"
         }
@@ -170,6 +199,9 @@ def process_tvs_row(row, symbol):
     if symbol.isdigit() and symbol in TW_STOCK_NAMES:
         display_name = TW_STOCK_NAMES[symbol]
 
+    raw_mcap = get_field(row, ['Market Capitalization'], 0)
+    formatted_mcap = format_market_cap(raw_mcap, is_tw=symbol.isdigit())
+
     data = {
         "symbol": symbol,
         "name": display_name,
@@ -177,7 +209,7 @@ def process_tvs_row(row, symbol):
         "change": get_field(row, ['Change'], 0),
         "changePercent": get_field(row, ['Change %'], 0),
         "volume": get_field(row, ['Volume'], 0),
-        "marketCap": get_field(row, ['Market Capitalization'], 0),
+        "marketCap": formatted_mcap,
         "technicalRating": tech_rating,
         "analystRating": get_field(row, ['Analyst Rating', StockField.RECOMMENDATION_MARK.label], 3),
         "targetPrice": get_field(row, ['Target Price (Average)', 'Price Target Mean', StockField.PRICE_TARGET_AVERAGE.label], 0),

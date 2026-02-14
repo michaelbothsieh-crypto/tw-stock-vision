@@ -361,18 +361,31 @@ class handler(BaseHTTPRequestHandler):
             df = ss.get()
             
             if df.empty:
-                popular_symbols = ["2330", "2317", "2454", "2603", "2881"] if market_param == 'TW' else ["NVDA", "AAPL", "TSLA", "MSFT", "GOOGL"]
+                # 若 TVS 失效，回退到預定義的熱門標的
+                if market_param == 'TW':
+                    popular = [
+                        ("2330", "台積電"), ("2317", "鴻海"), ("2454", "聯發科"), 
+                        ("2603", "長榮"), ("2881", "富邦金"), ("2308", "台達電"),
+                        ("2382", "廣達"), ("2882", "國泰金"), ("3711", "日月光投控")
+                    ]
+                else:
+                    popular = [
+                        ("NVDA", "NVIDIA"), ("AAPL", "Apple"), ("TSLA", "Tesla"),
+                        ("MSFT", "Microsoft"), ("GOOGL", "Google"), ("AMZN", "Amazon"),
+                        ("META", "Meta"), ("AVGO", "Broadcom"), ("LLY", "Eli Lilly")
+                    ]
+                
                 results = []
-                for sym in popular_symbols:
+                for sym, name in popular:
                     price = self._fetch_price_internal(sym)
                     results.append({
                         "symbol": sym,
-                        "description": TW_STOCK_NAMES.get(sym, sym if market_param == 'US' else "熱門標的"),
+                        "description": name,
                         "price": price,
                         "changePercent": 0,
                         "rating": 0.5
                     })
-                self.wfile.write(json.dumps(results).encode('utf-8'))
+                self.wfile.write(json.dumps(sanitize_json(results)).encode('utf-8'))
                 return
 
             results = []
