@@ -24,12 +24,18 @@ def test_api_output(symbol):
               StockField.RELATIVE_VOLUME, StockField.CHAIKIN_MONEY_FLOW_20, StockField.VOLUME_WEIGHTED_AVERAGE_PRICE, 
               StockField.TECHNICAL_RATING, StockField.AVERAGE_TRUE_RANGE_14, StockField.RELATIVE_STRENGTH_INDEX_14,
               StockField.SIMPLE_MOVING_AVERAGE_50, StockField.SIMPLE_MOVING_AVERAGE_200,
-              StockField.PIOTROSKI_F_SCORE_TTM, StockField.BASIC_EPS_TTM, StockField.RECOMMENDATION_MARK)
+              StockField.PIOTROSKI_F_SCORE_TTM, StockField.BASIC_EPS_TTM, StockField.RECOMMENDATION_MARK,
+              StockField.GROSS_MARGIN_TTM, StockField.OPERATING_MARGIN_TTM, StockField.NET_MARGIN_TTM,
+              StockField.ALTMAN_Z_SCORE_TTM, StockField.GRAHAM_NUMBERS_TTM)
     df = ss.get()
     
     data = None
     if not df.empty:
         raw_row = df.iloc[0].to_dict()
+        print("\nRaw Row from TVS:")
+        for k, v in raw_row.items():
+            if 'Margin' in k or 'Score' in k or 'Graham' in k:
+                print(f"{k}: {v}")
         data = process_tvs_row(raw_row, symbol)
         print("TVS Data Found")
     

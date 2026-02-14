@@ -5,16 +5,23 @@ import yfinance as yf
 from api.constants import TW_STOCK_NAMES, SECTOR_TRANSLATIONS, EXCHANGE_TRANSLATIONS
 
 def get_field(data, keys, default=0):
+    """從字典中多重金鑰尋找數值，支援 TVS 標籤與 yfinance 特性"""
     for k in keys:
         if k in data and data[k] is not None:
             val = data[k]
-            # Handle percentage strings from TV
+            # 處理 NaN (Python float('nan'))
+            if isinstance(val, float) and math.isnan(val):
+                continue
+            # 處理 TV 的百分比字串
             if isinstance(val, str) and '%' in val:
                 try: val = float(val.replace('%', ''))
                 except: pass
-            # Robust float conversion
+            # 強健轉型
             try:
-                return float(val)
+                res = float(val)
+                # 排除某些不合理的極大值 (TVS 有時會回傳占位符)
+                if res > 1e12: return default
+                return res
             except (ValueError, TypeError):
                 continue
     return default
@@ -170,10 +177,11 @@ def process_tvs_row(row, symbol):
         "atr": atr,
         "atr_p": atr_p,
         "vwap": get_field(row, ['Volume Weighted Average Price'], price),
-        "fScore": get_field(row, ['Piotroski F-Score (TTM)', 'Piotroski F-Score'], 0),
-        "grossMargin": get_field(row, ['Gross Margin (TTM)', 'Gross Margin'], 0),
-        "netMargin": get_field(row, ['Net Margin (TTM)', 'Net Margin', 'Profit Margin'], 0),
-        "operatingMargin": get_field(row, ['Operating Margin (TTM)', 'Operating Margin'], 0),
+        "fScore": get_field(row, ['Piotroski F-Score (TTM)', 'Piotroski F-Score', StockField.PIOTROSKI_F_SCORE_TTM.label], 0),
+        "grossMargin": get_field(row, ['Gross Margin (TTM)', 'Gross Margin', StockField.GROSS_MARGIN_TTM.label], 0),
+        "netMargin": get_field(row, ['Net Margin (TTM)', 'Net Margin', StockField.NET_MARGIN_TTM.label], 0),
+        "operatingMargin": get_field(row, ['Operating Margin (TTM)', 'Operating Margin', StockField.OPERATING_MARGIN_TTM.label], 0),
+        "zScore": get_field(row, ['Altman Z-Score (TTM)', 'Altman Z-Score', StockField.ALTMAN_Z_SCORE_TTM.label], 0),
         "eps": eps,
         "sector": row.get('Sector', '-'),
         "industry": row.get('Industry', '-'),
@@ -184,8 +192,8 @@ def process_tvs_row(row, symbol):
     # 補全葛拉漢數
     if eps > 0:
         ma_calc = math.sqrt(max(0, 22.5 * eps * (price / 1.5)))
-        data["grahamNumber"] = get_field(row, ["Graham's Number"], ma_calc)
+        data["grahamNumber"] = get_field(row, ["Graham's Number (TTM)", "Graham's Number (FY)", "Graham's Number"], ma_calc)
     else:
-        data["grahamNumber"] = 0
+        data["grahamNumber"] = get_field(row, ["Graham's Number (TTM)", "Graham's Number (FY)", "Graham's Number"], 0)
         
     return data
