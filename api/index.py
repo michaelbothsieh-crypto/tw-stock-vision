@@ -273,6 +273,17 @@ def sanitize_json(obj):
         return obj
     return obj
 
+def get_field(data, keys, default=0):
+    for k in keys:
+        if k in data and data[k] is not None:
+            val = data[k]
+            # Handle string formatting like '10.5%'
+            if isinstance(val, str) and '%' in val:
+                try: val = float(val.replace('%', ''))
+                except: pass
+            return val
+    return default
+
 class handler(BaseHTTPRequestHandler):
     def _set_headers(self):
         self.send_response(200)
