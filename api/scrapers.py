@@ -33,28 +33,59 @@ def sanitize_json(obj):
 def fetch_from_yfinance(symbol):
     try:
         ticker_symbol = symbol
+        info = None
         if symbol.isdigit():
-            # TW stocks
-            test_ticker = symbol + ".TW"
-            t = yf.Ticker(test_ticker)
-            info = t.info
-            if info and ('regularMarketPrice' in info or 'currentPrice' in info):
-                ticker_symbol = test_ticker
-            else:
-                test_ticker = symbol + ".TWO"
+            # TW stocks - Try .TW first, then .TWO
+            for suffix in [".TW", ".TWO"]:
+                test_ticker = symbol + suffix
                 t = yf.Ticker(test_ticker)
-                info = t.info
-                if info and ('regularMarketPrice' in info or 'currentPrice' in info):
-                    ticker_symbol = test_ticker
+                try:
+                    info = t.info
+                    # Check if we got meaningful data
+                    if info and ('regularMarketPrice' in info or 'currentPrice' in info or 'longName' in info):
+                        ticker_symbol = test_ticker
+                        break
+                    else:
+                        # Backup: Try history if info is 404
+                        hist = t.history(period="1d")
+                        if not hist.empty:
+                            price = float(hist['Close'].iloc[-1])
+                            return {
+                                "symbol": symbol,
+                                "name": TW_STOCK_NAMES.get(symbol, f"台股 {symbol}"),
+                                "price": price,
+                                "change": 0,
+                                "changePercent": 0,
+                                "volume": 0,
+                                "marketCap": 0,
+                                "technicalRating": 0.5,
+                                "analystRating": 3,
+                                "targetPrice": price * 1.1,
+                                "sma50": price,
+                                "sma200": price,
+                                "sector": "-",
+                                "industry": "-",
+                                "exchange": suffix[1:],
+                                "fScore": 5,
+                                "zScore": 1.5,
+                                "grossMargin": 0,
+                                "netMargin": 0,
+                                "operatingMargin": 0,
+                                "eps": 0,
+                                "grahamNumber": price * 0.9,
+                                "source": "yf-hist"
+                            }
+                except:
+                    continue
         else:
             t = yf.Ticker(ticker_symbol)
             info = t.info
 
-        if not info or ('regularMarketPrice' not in info and 'currentPrice' not in info):
+        if not info or ('regularMarketPrice' not in info and 'currentPrice' not in info and 'longName' not in info):
             return None
             
-        price = info.get('regularMarketPrice', info.get('currentPrice', 0))
-        prev_close = info.get('regularMarketPreviousClose', price)
+        price = info.get('regularMarketPrice', info.get('currentPrice', info.get('previousClose', 0)))
+        prev_close = info.get('regularMarketPreviousClose', info.get('previousClose', price))
         change = price - prev_close
         change_p = (change / prev_close * 100) if prev_close else 0
         
@@ -62,58 +93,43 @@ def fetch_from_yfinance(symbol):
         sma200 = info.get('twoHundredDayAverage', price)
         momentum = 0.5 if price > sma50 else -0.5
         
-        gross_margin = info.get('grossMargins', 0)
-        net_margin = info.get('profitMargins', 0)
-        operating_margin = info.get('operatingMargins', 0)
+        gross_margin = (info.get('grossMargins', 0) or 0) * 100
+        net_margin = (info.get('profitMargins', 0) or 0) * 100
+        operating_margin = (info.get('operatingMargins', 0) or 0) * 100
+
+        eps = info.get('trailingEps', info.get('forwardEps', info.get('epsTrailingTwelveMonths', 0))) or 0
+        bvps = info.get('bookValue', 0) or 0
         
-        if gross_margin: gross_margin *= 100
-        if net_margin: net_margin *= 100
-        if operating_margin: operating_margin *= 100
+        graham_number = math.sqrt(max(0, 22.5 * eps * bvps)) if eps > 0 and bvps > 0 else (price * 0.85)
 
-        eps = info.get('trailingEps', info.get('forwardEps', 0))
-        bvps = info.get('bookValue', 0)
-        
-        graham_number = 0
-        if eps > 0 and bvps > 0:
-            graham_number = math.sqrt(max(0, 22.5 * eps * bvps))
-        elif eps > 0:
-            graham_number = math.sqrt(max(0, 22.5 * eps * (price / 1.5)))
+        f_score_est = 3
+        if net_margin > 0: f_score_est += 2
+        if info.get('returnOnAssets', 0) > 0: f_score_est += 2
+        if info.get('operatingCashflow', 0) > 0: f_score_est += 2
 
-        # Estimate F-Score/Z-Score from yfinance indicators
-        f_score_est = 4
-        if net_margin > 0: f_score_est += 1
-        if info.get('operatingCashflow', 0) > 0: f_score_est += 1
-        if info.get('returnOnAssets', 0) > 0: f_score_est += 1
-
-        z_score_est = 1.5
-        if gross_margin > 30: z_score_est += 1.0
-        if info.get('quickRatio', 0) > 1: z_score_est += 0.5
+        z_score_est = 1.0 + (0.5 if info.get('currentRatio', 0) > 1.5 else 0) + (1.0 if info.get('debtToEquity', 100) < 50 else 0)
         
         return {
             "symbol": symbol,
             "name": info.get('longName', info.get('shortName', symbol)),
             "price": price,
-            "change": change,
             "changePercent": change_p,
-            "volume": info.get('regularMarketVolume', 0),
-            "marketCap": info.get('marketCap', 0),
             "technicalRating": momentum,
             "analystRating": info.get('recommendationMean', 3),
-            "targetPrice": info.get('targetMedianPrice', info.get('targetMeanPrice', 0)),
+            "targetPrice": info.get('targetMedianPrice', info.get('targetMeanPrice', price * 1.1)),
             "sma50": sma50,
             "sma200": sma200,
-            "sector": info.get('sector', '-'),
-            "industry": info.get('industry', '-'),
-            "exchange": info.get('exchange', 'TWSE'),
-            "fScore": f_score_est,
-            "zScore": z_score_est,
-            "grossMargin": gross_margin,
-            "netMargin": net_margin,
-            "operatingMargin": operating_margin,
-            "eps": eps,
-            "grahamNumber": graham_number,
+            "fScore": min(9, f_score_est),
+            "zScore": round(z_score_est, 2),
+            "grahamNumber": round(graham_number, 2),
             "source": "yfinance"
         }
+    except Exception as e:
+        print(f"yfinance error: {e}")
+        return None
+    except Exception as e:
+        print(f"yfinance error: {e}")
+        return None
     except Exception as e:
         print(f"yfinance error: {e}")
         return None

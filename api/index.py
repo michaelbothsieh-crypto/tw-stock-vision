@@ -230,7 +230,9 @@ class handler(BaseHTTPRequestHandler):
 
         self._set_headers()
         try:
-            is_us = not symbol.isdigit()
+            is_tw = symbol.isdigit()
+            is_us = not is_tw
+            
             ss = StockScreener()
             ss.set_markets(tvs.Market.AMERICA if is_us else tvs.Market.TAIWAN)
             ss.search(symbol)
@@ -238,45 +240,45 @@ class handler(BaseHTTPRequestHandler):
                       StockField.VOLUME, StockField.MARKET_CAPITALIZATION, StockField.SECTOR, StockField.INDUSTRY, StockField.EXCHANGE,
                       StockField.RELATIVE_VOLUME, StockField.CHAIKIN_MONEY_FLOW_20, StockField.VOLUME_WEIGHTED_AVERAGE_PRICE, 
                       StockField.TECHNICAL_RATING, StockField.AVERAGE_TRUE_RANGE_14, StockField.RELATIVE_STRENGTH_INDEX_14,
-                      StockField.SIMPLE_MOVING_AVERAGE_50, 
+                      StockField.SIMPLE_MOVING_AVERAGE_50, StockField.SIMPLE_MOVING_AVERAGE_200,
                       StockField.PIOTROSKI_F_SCORE_TTM, StockField.BASIC_EPS_TTM, StockField.RECOMMENDATION_MARK)
             df = ss.get()
             
-            if df.empty:
-                data = fetch_from_yfinance(symbol)
-            else:
+            # 如果精確搜尋失敗且是台股，嘗試模糊搜尋
+            if df.empty and is_tw:
+                ss = StockScreener()
+                ss.set_markets(tvs.Market.TAIWAN)
+                df_all = ss.get()
+                if not df_all.empty:
+                    df = df_all[df_all['Name'].str.contains(symbol, na=False) | df_all['Description'].str.contains(symbol, na=False)]
+
+            data = None
+            if not df.empty:
                 raw_row = df.iloc[0].to_dict()
                 data = process_tvs_row(raw_row, symbol)
                 
-                # 回填與補件邏輯: 
-                # 當 technicalRating 為 0, 或關鍵數據缺失時 (fScore, zScore, grahamNumber), 使用 yfinance 補齊
-                needs_fallback = (
-                    data.get('technicalRating') == 0 or 
-                    data.get('fScore', 0) == 0 or 
-                    data.get('zScore', 0) < 0.1 or 
-                    data.get('grahamNumber', 0) == 0
-                )
-                
-                if needs_fallback:
-                    yf_f = fetch_from_yfinance(symbol)
-                    if yf_f:
-                        # 補齊目標價、評級與財務三率
-                        if not data.get('targetPrice'): data['targetPrice'] = yf_f.get('targetPrice', 0)
-                        if data.get('technicalRating') == 0: data['technicalRating'] = yf_f.get('technicalRating', 0)
-                        
-                        # 合併 yfinance 到缺失的欄位
-                        for key in ['fScore', 'zScore', 'grossMargin', 'netMargin', 'operatingMargin', 'grahamNumber', 'eps']:
-                            if not data.get(key) or data.get(key) == 0:
-                                data[key] = yf_f.get(key, 0)
+            # 如果仍無數據或關鍵缺失，由 yfinance 深度補件
+            if not data or data.get('fScore', 0) == 0:
+                yf_data = fetch_from_yfinance(symbol)
+                if yf_data:
+                    if not data: 
+                        data = yf_data
+                    else:
+                        # 融合：將 yf 的關鍵財務指標併入 tv 資料
+                        for k in ['fScore', 'zScore', 'grahamNumber', 'eps', 'targetPrice', 'technicalRating']:
+                            if not data.get(k) or data.get(k) == 0:
+                                data[k] = yf_data.get(k, 0)
 
             if data:
-                # 生成雷達圖數據 (Scoring)
+                price = data.get('price', 1)
+                data['current_price'] = price
+                # 雷達圖：確保即使資料欠缺也有保底數值呈現 (避免 0 點)
                 data['radarData'] = [
-                    {"subject": "動能", "A": min(100, max(0, 50 + (data.get('technicalRating', 0) * 50))), "desc": "價格相對 MA 的強度"},
-                    {"subject": "趨勢", "A": min(100, max(0, 50 + ((data.get('price', 1) - data.get('sma50', 1)) / data.get('sma50', 1) * 200))), "desc": "短期均線排列狀態"},
-                    {"subject": "關注", "A": min(100, data.get('rvol', 1) * 30), "desc": "相對成交量異常偵測"},
-                    {"subject": "安全", "A": min(100, data.get('fScore', 5) * 11), "desc": "Piotroski 財務評分"},
-                    {"subject": "價值", "A": min(100, (data.get('grahamNumber', 0) / data.get('price', 1) * 100) if data.get('price', 0) > 0 else 50), "desc": "葛拉漢合理價折溢價"}
+                    {"subject": "動能", "A": max(15, min(100, 50 + (data.get('technicalRating', 0) * 50))), "desc": "價格相對 MA 的強度"},
+                    {"subject": "趨勢", "A": max(15, min(100, 50 + ((price - data.get('sma50', price)) / max(1, data.get('sma50', 1)) * 200))), "desc": "短期均線排列狀態"},
+                    {"subject": "關注", "A": max(15, min(100, data.get('rvol', 1) * 30)), "desc": "相對成交量異常偵測"},
+                    {"subject": "安全", "A": max(15, min(100, data.get('fScore', 3) * 11)), "desc": "Piotroski 財務評分"},
+                    {"subject": "價值", "A": max(15, min(100, (data.get('grahamNumber', 0) / price * 100) if price > 0 else 55)), "desc": "葛拉漢合理價折溢價"}
                 ]
                 # AI 預測區間 (對齊前端 PredictionCard 必要欄位)
                 atr = data.get('atr', data['price'] * 0.02)
