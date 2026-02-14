@@ -221,14 +221,10 @@ class handler(BaseHTTPRequestHandler):
         except:
             return 0
 
-    def _handle_stock_lookup(self, symbol):
+    def _handle_stock_lookup(self, symbol, q):
         symbol = re.sub(r'\.TW[O]?$', '', symbol.strip(), flags=re.IGNORECASE).upper()
         # Name Lookup...
-        is_tw = symbol.isdigit()
-        if is_tw and symbol in TW_STOCK_NAMES:
-            # 確保台股代號能正確對應到中文名，避免模糊搜尋失敗
-            pass
-            
+        
         for ticker, name in TW_STOCK_NAMES.items():
             if symbol == name or symbol in name:
                 symbol = ticker
@@ -512,7 +508,7 @@ class handler(BaseHTTPRequestHandler):
         q = parse_qs(parsed.query)
         if 'leaderboard' in q or '/leaderboard' in parsed.path: self._handle_leaderboard()
         elif 'trending' in q or '/market/trending' in parsed.path: self._handle_market_trending()
-        elif 'symbol' in q: self._handle_stock_lookup(q['symbol'][0])
+        elif 'symbol' in q: self._handle_stock_lookup(q['symbol'][0], q)
         elif parsed.path.endswith('/health'):
             self._set_headers()
             self.wfile.write(json.dumps({"status": "ok"}).encode('utf-8'))
