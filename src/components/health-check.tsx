@@ -139,10 +139,14 @@ export function HealthCheck({ data }: HealthCheckProps) {
                                 <div className="flex justify-between items-center mb-1">
                                     <div className="flex items-center gap-1">
                                         <span className="text-xs text-zinc-500 uppercase">F-Score</span>
-                                        <TooltipProvider>
+                                        <TooltipProvider delayDuration={0}>
                                             <Tooltip>
-                                                <TooltipTrigger><Info className="h-3 w-3 text-zinc-600" /></TooltipTrigger>
-                                                <TooltipContent className="max-w-[200px] text-[10px]">
+                                                <TooltipTrigger asChild>
+                                                    <button className="cursor-help outline-none">
+                                                        <Info className="h-3.5 w-3.5 text-zinc-600 hover:text-primary transition-colors" />
+                                                    </button>
+                                                </TooltipTrigger>
+                                                <TooltipContent className="max-w-[200px] text-[10px] bg-zinc-900 border-zinc-800 text-zinc-300">
                                                     Piotroski F-Score：衡量獲利能力、營運效率及財務槓桿，最高 9 分，越高代表體質越強。
                                                 </TooltipContent>
                                             </Tooltip>
@@ -161,10 +165,14 @@ export function HealthCheck({ data }: HealthCheckProps) {
                                 <div className="flex justify-between items-center mb-1">
                                     <div className="flex items-center gap-1">
                                         <span className="text-xs text-zinc-500 uppercase">Z-Score</span>
-                                        <TooltipProvider>
+                                        <TooltipProvider delayDuration={0}>
                                             <Tooltip>
-                                                <TooltipTrigger><Info className="h-3 w-3 text-zinc-600" /></TooltipTrigger>
-                                                <TooltipContent className="max-w-[200px] text-[10px]">
+                                                <TooltipTrigger asChild>
+                                                    <button className="cursor-help outline-none">
+                                                        <Info className="h-3.5 w-3.5 text-zinc-600 hover:text-primary transition-colors" />
+                                                    </button>
+                                                </TooltipTrigger>
+                                                <TooltipContent className="max-w-[200px] text-[10px] bg-zinc-900 border-zinc-800 text-zinc-300">
                                                     Altman Z-Score：破產預警指標。&gt; 2.99 為安全，&lt; 1.81 為財務困窘區。
                                                 </TooltipContent>
                                             </Tooltip>
