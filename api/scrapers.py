@@ -162,9 +162,14 @@ def process_tvs_row(row, symbol):
             elif 'Strong Sell' in rec: tech_rating = -1
             elif 'Sell' in rec: tech_rating = -0.5
 
+    # 優先嘗試從常數表獲取中文名稱 (針對台股)
+    display_name = row.get('Description', row.get('Name', symbol))
+    if symbol.isdigit() and symbol in TW_STOCK_NAMES:
+        display_name = TW_STOCK_NAMES[symbol]
+
     data = {
         "symbol": symbol,
-        "name": row.get('Description', row.get('Name', symbol)),
+        "name": display_name,
         "price": price,
         "change": get_field(row, ['Change'], 0),
         "changePercent": get_field(row, ['Change %'], 0),

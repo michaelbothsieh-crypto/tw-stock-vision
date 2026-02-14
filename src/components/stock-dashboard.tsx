@@ -151,8 +151,8 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                         <div className="flex flex-wrap items-baseline gap-3">
                             <h2 className="text-4xl font-bold tracking-tight text-foreground">{data.symbol}</h2>
                             <div className="flex flex-wrap items-center gap-2">
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-800 text-zinc-400 border border-zinc-700">{EXCHANGE_TRANSLATIONS[data.exchange] || data.exchange}</span>
-                                {data.sector && data.sector !== '-' && <span className="px-3 py-0.5 rounded-full text-xs bg-zinc-800/50 text-zinc-400 border border-zinc-700/50">{SECTOR_TRANSLATIONS[data.sector] || data.sector}</span>}
+                                <span className="px-2.5 py-1 rounded text-xs font-bold bg-zinc-800 text-zinc-300 border border-zinc-700">{EXCHANGE_TRANSLATIONS[data.exchange] || data.exchange}</span>
+                                {data.sector && data.sector !== '-' && <span className="px-3 py-1 rounded-full text-xs bg-zinc-800/50 text-zinc-300 border border-zinc-700/50">{SECTOR_TRANSLATIONS[data.sector] || data.sector}</span>}
                             </div>
                         </div>
                         <p className="mt-1 text-2xl font-bold text-primary/90">{data.name || data.symbol}</p>
@@ -168,7 +168,7 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                         </div>
                     </div>
                     <div className={cn("flex flex-col items-end text-right", isPositive ? "text-emerald-400" : "text-rose-400")}>
-                        <h3 className="text-[0.65rem] font-bold text-zinc-500 uppercase tracking-widest mb-1 opacity-80">即時報價</h3>
+                        <h3 className="text-xs md:text-sm font-bold text-zinc-400 uppercase tracking-widest mb-1">即時報價</h3>
                         <span className="text-6xl font-black font-mono tracking-tighter shadow-glow leading-none">{(Number(data.price) || 0).toFixed(2)}</span>
                         <div className="flex items-center gap-2 text-xl font-bold mt-2">
                             <span>{isPositive ? "▲" : "▼"} {(Number(data.change) || 0).toFixed(2)}</span>
@@ -189,32 +189,32 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                         <div className="relative z-10">
                             <div className="flex justify-between items-center mb-6">
                                 <div className="flex items-center gap-2">
-                                    <h3 className="text-[0.65rem] font-bold text-zinc-500 uppercase tracking-[0.15em] flex items-center gap-2">
-                                        <TrendingUp className="h-3.5 w-3.5" /> 目標價與評級
+                                    <h3 className="text-xs md:text-sm font-bold text-zinc-400 uppercase tracking-[0.12em] flex items-center gap-2">
+                                        <TrendingUp className="h-4 w-4" /> 目標價與評級
                                     </h3>
                                     <InfoTooltip content={STOCK_DEFINITIONS["分析師評語"]} />
                                 </div>
-                                <div className={cn("px-2.5 py-1 rounded-lg text-[10px] font-bold border shadow-sm", (data.targetPrice || 0) > data.price ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20")}>
+                                <div className={cn("px-2.5 py-1 rounded-lg text-xs font-bold border shadow-md transition-colors", (data.targetPrice || 0) > data.price ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20")}>
                                     {data.targetPrice && data.price ? `${(((data.targetPrice) - data.price) / data.price * 100).toFixed(1)}% Upside` : "- % Upside"}
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">一年預測目標</div>
+                                <div className="space-y-1.5">
+                                    <div className="text-xs text-zinc-400 font-bold uppercase tracking-wider">一年預測目標</div>
                                     <div className="text-3xl font-black font-mono text-zinc-100">
                                         {data.targetPrice && data.targetPrice > 0 ? data.targetPrice.toFixed(1) : "--"}
                                     </div>
                                 </div>
 
-                                <div className="space-y-3">
+                                <div className="space-y-3.5">
                                     <div className="flex items-center justify-between">
-                                        <div className="text-[10px] text-zinc-500 font-bold uppercase">分析師評級</div>
-                                        <div className="text-xs font-bold text-zinc-200">{getAnalystText(data.analystRating || 3)}</div>
+                                        <div className="text-xs text-zinc-400 font-bold uppercase">分析師評級</div>
+                                        <div className="text-xs md:text-sm font-bold text-zinc-200">{getAnalystText(data.analystRating || 3)}</div>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <div className="text-[10px] text-zinc-500 font-bold uppercase">技術評級</div>
-                                        <div className="text-xs font-bold" style={{ color: getRatingColor(data.technicalRating) }}>{getRatingText(data.technicalRating)}</div>
+                                        <div className="text-xs text-zinc-400 font-bold uppercase">技術評級</div>
+                                        <div className="text-xs md:text-sm font-bold" style={{ color: getRatingColor(data.technicalRating) }}>{getRatingText(data.technicalRating)}</div>
                                     </div>
                                 </div>
                             </div>
@@ -222,7 +222,7 @@ export function StockDashboard({ data, loading, error }: StockDashboardProps) {
                     </div>
                 </div>
             </div>
-            <div className="text-center text-[10px] text-zinc-600 font-medium tracking-wide uppercase mt-4 mb-8">
+            <div className="text-center text-xs text-zinc-500 font-medium tracking-wide uppercase mt-6 mb-8 px-4 leading-relaxed">
                 * SMC 指標及 AI 預測僅供參考，不構成投資建議。
             </div>
         </motion.div>

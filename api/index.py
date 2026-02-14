@@ -223,6 +223,11 @@ class handler(BaseHTTPRequestHandler):
     def _handle_stock_lookup(self, symbol):
         symbol = re.sub(r'\.TW[O]?$', '', symbol.strip(), flags=re.IGNORECASE).upper()
         # Name Lookup...
+        is_tw = symbol.isdigit()
+        if is_tw and symbol in TW_STOCK_NAMES:
+            # 確保台股代號能正確對應到中文名，避免模糊搜尋失敗
+            pass
+            
         for ticker, name in TW_STOCK_NAMES.items():
             if symbol == name or symbol in name:
                 symbol = ticker

@@ -33,7 +33,7 @@ export function VitalRow({ label, value, status }: { label: string, value: strin
     return (
         <div className="flex items-center justify-between p-3 rounded-2xl border border-white/[0.03] bg-white/[0.02] group hover:bg-white/[0.05] transition-all duration-300">
             <div className="flex items-center gap-2">
-                <span className="text-[0.65rem] font-bold text-zinc-500 uppercase tracking-widest group-hover:text-zinc-400 transition-colors">{label}</span>
+                <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest group-hover:text-zinc-300 transition-colors uppercase">{label}</span>
                 {definition && <InfoTooltip content={definition} />}
             </div>
             <span className={cn("text-sm font-mono font-bold px-2.5 py-1 rounded-lg border shadow-sm transition-transform group-hover:scale-105", colors[status])}>
