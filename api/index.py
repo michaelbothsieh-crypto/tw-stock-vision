@@ -252,9 +252,18 @@ class handler(BaseHTTPRequestHandler):
 
         self._set_headers()
         try:
-            is_tw = symbol.isdigit()
+            # 改良市場偵測邏輯：包含中文或純數字 -> 台股；其餘 -> 美股
+            has_chinese = bool(re.search(r'[\u4e00-\u9fff]', symbol))
+            is_digit = symbol.isdigit()
+            
+            is_tw = has_chinese or is_digit
             is_us = not is_tw
             
+            # 如果是台股且為數字，確保為 4-6 位數，否則可能是美股純數字代號（較少見但防呆）
+            if is_digit and len(symbol) > 6:
+                is_tw = False
+                is_us = True
+
             ss = StockScreener()
             ss.set_markets(tvs.Market.AMERICA if is_us else tvs.Market.TAIWAN)
             ss.search(symbol)
