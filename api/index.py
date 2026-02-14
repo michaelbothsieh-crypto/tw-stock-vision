@@ -148,20 +148,31 @@ init_db()
 
 def fetch_from_yfinance(symbol):
     """Fallback to yfinance for stock data"""
+    """Fallback to yfinance for stock data"""
     try:
         # Normalize symbol for TW
         ticker_symbol = symbol
         if symbol.isdigit():
-            # Try TW then TWO
-            for suffix in [".TW", ".TWO"]:
-                test_ticker = symbol + suffix
+            # Quick check: we can often guess .TW is more likely for major stocks, 
+            # but let's try to be smart without too many .info calls.
+            # Only try ONE suffix first if possible, or use a faster lookup.
+            # Attempt .TW first (majority)
+            test_ticker = symbol + ".TW"
+            t = yf.Ticker(test_ticker)
+            info = t.info
+            if info and 'regularMarketPrice' in info:
+                ticker_symbol = test_ticker
+            else:
+                # Try .TWO
+                test_ticker = symbol + ".TWO"
                 t = yf.Ticker(test_ticker)
-                if t.info and 'regularMarketPrice' in t.info:
+                info = t.info
+                if info and 'regularMarketPrice' in info:
                     ticker_symbol = test_ticker
-                    break
-        
-        t = yf.Ticker(ticker_symbol)
-        info = t.info
+        else:
+            t = yf.Ticker(ticker_symbol)
+            info = t.info
+
         if not info or 'regularMarketPrice' not in info:
             return None
             
@@ -463,7 +474,7 @@ class handler(BaseHTTPRequestHandler):
                 cur.execute("""
                     SELECT data FROM stock_cache 
                     WHERE symbol = %s 
-                    AND updated_at > NOW() - INTERVAL '5 minutes'
+                    AND updated_at > NOW() - INTERVAL '1 hour'
                 """, (symbol,))
                 cached_row = cur.fetchone()
                 if cached_row:
