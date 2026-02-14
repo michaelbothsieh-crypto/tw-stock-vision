@@ -295,11 +295,13 @@ class handler(BaseHTTPRequestHandler):
                         is_tw = symbol.isdigit()
                         for k in keys_to_merge:
                             # 針對目標價 (targetPrice)，如果是台股或者是 TVS 數值顯然異常，則優先用 yf
+                            # 加強判斷：若台股代號且 yf 有資料，則強制 yf
                             force_yf = False
-                            if k == 'targetPrice' and is_tw:
+                            if k == 'targetPrice' and is_tw and yf_data.get('targetPrice'):
                                 force_yf = True
                             
-                            if force_yf or not data.get(k) or data.get(k) == 0:
+                            # 或者原始資料無效時也補件
+                            if force_yf or data.get(k) is None or data.get(k) == 0:
                                 val = yf_data.get(k)
                                 if val is not None:
                                     data[k] = val
@@ -383,6 +385,10 @@ class handler(BaseHTTPRequestHandler):
                 symbol = raw_name if raw_name.isdigit() else raw_symbol.split(':')[-1]
                 if not symbol: symbol = raw_symbol
                 
+                # 過濾掉非數字的台股標的 (若是台股市場)
+                if market_param == 'TW' and not symbol.isdigit():
+                    continue
+
                 desc = row.get('Description', symbol)
                 if market_param == 'TW' and symbol in TW_STOCK_NAMES:
                     desc = TW_STOCK_NAMES[symbol]
