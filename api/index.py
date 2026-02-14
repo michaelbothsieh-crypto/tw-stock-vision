@@ -195,6 +195,8 @@ def fetch_from_yfinance(symbol):
         peg_ratio = info.get('pegRatio', 0)
         eps_growth = info.get('earningsGrowth', 0)
         rev_growth = info.get('revenueGrowth', 0)
+        eps = info.get('trailingEps', info.get('forwardEps', 0))
+        bvps = info.get('bookValue', 0)
 
         # Mock F-Score / Z-Score based on margins for fallback
         f_score = 4
@@ -202,6 +204,13 @@ def fetch_from_yfinance(symbol):
         if operating_margin > gross_margin * 0.5: f_score += 1
 
         z_score = (gross_margin / 20) if gross_margin else 1.5
+        
+        # Graham Number = sqrt(22.5 * EPS * BVPS)
+        graham_number = 0
+        if eps > 0 and bvps > 0:
+            graham_number = math.sqrt(max(0, 22.5 * eps * bvps))
+        elif eps > 0: # Proxy
+            graham_number = math.sqrt(max(0, 22.5 * eps * (price / 1.5)))
         
         data = {
             "symbol": symbol,
@@ -558,12 +567,12 @@ class handler(BaseHTTPRequestHandler):
             tech_rating = data.get('Technical Rating', 0)
             atr = data.get('Average True Range (14)', price * 0.02)
             rsi = get_field(data, ['Relative Strength Index (14)'], 50)
-            analyst_rating = get_field(data, ['Analyst Rating'], 3)
+            analyst_rating = get_field(data, ['Analyst Rating', 'Recommendation Mark'], 3)
             
             # Reconstruction Layer for Financial Strength (especially for TW)
             gross_margin = get_field(data, ['Gross Margin %', 'Gross Margin (TTM)'], 0)
             net_margin = get_field(data, ['Net Margin %', 'Net Margin (TTM)'], 0)
-            eps = get_field(data, ['Basic EPS (TTM)'], 0)
+            eps = get_field(data, ['Basic EPS (TTM)', 'EPS Diluted (TTM)'], 0)
             
             f_score = get_field(data, ['Piotroski F-score', 'Piotroski F-Score (TTM)'], 0)
             if not is_us_stock and f_score == 0:
@@ -578,7 +587,7 @@ class handler(BaseHTTPRequestHandler):
                 # Heuristic Z-Score based on margins
                 z_score = max(0.5, (gross_margin / 20) + (net_margin / 10))
             
-            graham_number = get_field(data, ["Graham's Number", "Graham Number"], 0)
+            graham_number = get_field(data, ["Graham's Number", "Graham Number", "Graham Numbers (TTM)"], 0)
             if not is_us_stock and graham_number == 0 and eps > 0:
                 # Graham Number = sqrt(22.5 * EPS * BVPS) 
                 # Since BVPS is often missing, use P/B as proxy or simply 22.5 * EPS * (Price/PB)
