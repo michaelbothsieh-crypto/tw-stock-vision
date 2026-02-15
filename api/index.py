@@ -271,7 +271,9 @@ class handler(BaseHTTPRequestHandler):
                        StockField.SIMPLE_MOVING_AVERAGE_50, StockField.SIMPLE_MOVING_AVERAGE_200,
                        StockField.PIOTROSKI_F_SCORE_TTM, StockField.BASIC_EPS_TTM, StockField.RECOMMENDATION_MARK,
                        StockField.GROSS_MARGIN_TTM, StockField.OPERATING_MARGIN_TTM, StockField.NET_MARGIN_TTM,
-                       StockField.ALTMAN_Z_SCORE_TTM, StockField.GRAHAM_NUMBERS_TTM, StockField.PRICE_TARGET_AVERAGE)
+                       StockField.ALTMAN_Z_SCORE_TTM, StockField.GRAHAM_NUMBERS_TTM, StockField.PRICE_TARGET_AVERAGE,
+                       StockField.RETURN_ON_EQUITY_TTM, StockField.RETURN_ON_ASSETS_TTM, StockField.DEBT_TO_EQUITY_RATIO_MRQ,
+                       StockField.REVENUE_TTM_YOY_GROWTH, StockField.NET_INCOME_TTM_YOY_GROWTH, StockField.YIELD_RECENT)
             df = ss.get()
             
             # 如果精確搜尋失敗且是台股，嘗試模糊搜尋
@@ -293,8 +295,8 @@ class handler(BaseHTTPRequestHandler):
                 data = process_tvs_row(raw_row, actual_symbol)
                 symbol = actual_symbol # 更新為代號
                 
-            # 如果仍無數據、關鍵缺失、或 fScore 太低，由 yfinance 補件
-            if not data or data.get('fScore', 0) < 5 or data.get('eps') is None:
+            # 如果仍無數據、關鍵缺失、或 F-Score 為 0 (台股 TVS 常缺失)，由 yfinance 補件
+            if not data or data.get('fScore', 0) == 0 or data.get('eps') is None or data.get('roe') == 0:
                 yf_data = fetch_from_yfinance(symbol)
                 if yf_data:
                     if not data: 
@@ -331,8 +333,8 @@ class handler(BaseHTTPRequestHandler):
                                     if is_yf_extreme:
                                         if not is_tvs_extreme and tvs_val > 0:
                                             continue # 保留 TVS，捨棄異常 yf
-                                        # 如果兩邊都極端或 TVS 沒資料，則強行壓回現價或不更新
-                                        if abs(yf_val - curr_p) / curr_p > 1.0: # 超過一倍，絕對是誤抓
+                                        # 如果兩邊都極端或 TVS 沒資料，且與現價偏離超過 80% (通常是匯率/單位錯誤)，則攔截
+                                        if abs(yf_val - curr_p) / curr_p > 0.8: 
                                             continue
                                     
                                     # 邏輯 B：決定是否覆蓋
