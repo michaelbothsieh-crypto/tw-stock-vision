@@ -75,7 +75,7 @@ export const FocusMetrics = ({ stock, detailedName, chartData }: { stock: StockD
                 <div className="mb-2">
                     <div className="mb-1 text-[10px] uppercase tracking-wider text-zinc-500">當前價格 (PRICE)</div>
                     <div className="flex items-baseline gap-3">
-                        <span className="tabular-nums text-6xl font-bold tracking-tighter text-white">{fmtNum(stock.price)}</span>
+                        <span className="tabular-nums text-4xl font-bold tracking-tighter text-white lg:text-6xl">{fmtNum(stock.price)}</span>
                         <span className={cn('tabular-nums text-xl font-medium', stock.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-500')}>
                             {fmtPct(stock.changePercent)}
                         </span>

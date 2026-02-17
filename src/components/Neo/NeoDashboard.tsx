@@ -197,15 +197,14 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
     }
 
     return (
-        <div className="flex h-screen flex-col overflow-hidden bg-[#050505] text-white selection:bg-emerald-500/30">
+        <div className="flex min-h-screen flex-col overflow-hidden bg-[#050505] text-white selection:bg-emerald-500/30 lg:h-screen">
             <TerminalHeader lastUpdate={time} market={market} />
 
-            <div className="grid flex-1 grid-cols-12 overflow-hidden pb-8">
-                <div className="col-span-4 h-full overflow-y-auto border-r border-white/10 bg-zinc-950/30">
-                    <FocusMetrics stock={selectedStock} detailedName={detailedName} chartData={chartData} />
-                </div>
+            <div className="flex flex-1 flex-col overflow-y-auto pb-16 lg:grid lg:grid-cols-12 lg:overflow-hidden lg:pb-8">
+                {/* Mobile Order: 1. Chart, 2. Metrics, 3. List */}
 
-                <div className="relative col-span-5 flex flex-col items-center justify-center border-r border-white/10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-900/50 to-black">
+                {/* 1. Chart Area (Mobile First Order) */}
+                <div className="relative order-1 flex min-h-[400px] flex-col items-center justify-center border-b border-white/10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-900/50 to-black lg:order-2 lg:col-span-5 lg:h-full lg:border-b-0 lg:border-r">
                     <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px]" />
 
                     <div className="relative z-10 h-full w-full p-4">
@@ -214,18 +213,18 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
                                 <span className="animate-pulse font-mono text-xs text-emerald-500">載入歷史數據中 (FETCHING)...</span>
                             </div>
                         ) : (
-                            <div className="h-[calc(100%-40px)] w-full">
+                            <div className="h-[300px] w-full lg:h-[calc(100%-40px)]">
                                 <StockChart data={chartData} color={selectedStock?.changePercent >= 0 ? '#10b981' : '#f43f5e'} />
                             </div>
                         )}
 
-                        <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2">
+                        <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2 overflow-x-auto px-4 pb-2 lg:pb-0">
                             {(Object.keys(PERIOD_MAP) as PeriodKey[]).map((key) => (
                                 <button
                                     key={key}
                                     onClick={() => setPeriodKey(key)}
                                     className={cn(
-                                        'rounded border border-white/10 px-3 py-1 font-mono text-xs transition-colors',
+                                        'shrink-0 rounded border border-white/10 px-3 py-1 font-mono text-xs transition-colors',
                                         periodKey === key
                                             ? 'border-white/20 bg-white/10 text-white'
                                             : 'bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white'
@@ -238,7 +237,13 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
                     </div>
                 </div>
 
-                <div className="col-span-3 h-full overflow-hidden">
+                {/* 2. Focus Metrics */}
+                <div className="order-2 border-b border-white/10 bg-zinc-950/30 lg:order-1 lg:col-span-4 lg:h-full lg:border-b-0 lg:border-r lg:overflow-y-auto">
+                    <FocusMetrics stock={selectedStock} detailedName={detailedName} chartData={chartData} />
+                </div>
+
+                {/* 3. Market Overview */}
+                <div className="order-3 min-h-[400px] bg-zinc-950/50 lg:order-3 lg:col-span-3 lg:h-full lg:overflow-hidden">
                     <MarketOverview
                         data={enrichedData}
                         onSelect={onSelect}
@@ -249,7 +254,9 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
                 </div>
             </div>
 
-            <ProTicker data={enrichedData} />
+            <div className="hidden lg:block">
+                <ProTicker data={enrichedData} />
+            </div>
         </div>
     );
 };
