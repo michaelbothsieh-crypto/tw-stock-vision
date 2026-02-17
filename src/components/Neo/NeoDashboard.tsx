@@ -283,7 +283,7 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
                         currentSymbol={selectedStock?.symbol}
                         market={market}
                         onMarketChange={onMarketChange}
-                        className="h-full"
+                        className="lg:h-full"
                     />
                 </div>
             </div>
