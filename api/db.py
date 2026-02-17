@@ -9,8 +9,29 @@ db_alive = True
 db_fail_count = 0
 db_lock = threading.Lock()
 
+def load_env_if_needed():
+    if not os.environ.get('DATABASE_URL'):
+        try:
+            # Try to find .env file in parent directories
+            current = os.path.dirname(os.path.abspath(__file__))
+            while current != os.path.dirname(current): # Stop at root
+                env_path = os.path.join(current, '.env')
+                if os.path.exists(env_path):
+                    with open(env_path, 'r') as f:
+                        for line in f:
+                            if '=' in line and not line.startswith('#'):
+                                key, value = line.strip().split('=', 1)
+                                os.environ[key] = value
+                    break
+                current = os.path.dirname(current)
+        except:
+            pass
+
 def get_db_connection():
     global db_pool, db_alive, db_fail_count
+    
+    load_env_if_needed()
+    
     if not db_alive:
         return None
     
@@ -91,6 +112,15 @@ def init_db():
                     symbol TEXT NOT NULL,
                     entry_price NUMERIC NOT NULL,
                     entry_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            # Stock Names Table (Master List)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS stock_names (
+                    symbol TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    type TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
             conn.commit()

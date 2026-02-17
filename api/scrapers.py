@@ -5,6 +5,14 @@ import yfinance as yf
 import re
 from api.constants import TW_STOCK_NAMES, SECTOR_TRANSLATIONS, EXCHANGE_TRANSLATIONS
 
+def trunc2(value):
+    """Truncate to 2 decimals without rounding (finance style)."""
+    try:
+        v = float(value)
+        return math.trunc(v * 100) / 100
+    except (TypeError, ValueError):
+        return 0
+
 def get_field(data, keys, default=0):
     """從字典中多重金鑰尋找數值，支援 TVS 標籤與 yfinance 特性"""
     for k in keys:
@@ -57,7 +65,7 @@ def fetch_from_yfinance(symbol):
     try:
         # 強制台股代號 (4位數字) 加上 .TW 後綴，確保抓取精確度
         yf_symbol = symbol
-        if re.match(r'^\d{4}$', symbol):
+        if re.match(r'^\d{4,6}$', symbol):
             yf_symbol = f"{symbol}.TW"
         
         # 如果 symbol 已經有 .TW/.TWO 則保留
@@ -140,7 +148,7 @@ def fetch_from_yfinance(symbol):
         
         # 市值處理
         raw_mcap = info.get('marketCap', 0)
-        is_tw_mkt = bool(re.match(r'^\d+$', symbol)) or symbol.endswith('.TW') or symbol.endswith('.TWO')
+        is_tw_mkt = bool(re.match(r'^\d{4,6}$', symbol)) or symbol.endswith('.TW') or symbol.endswith('.TWO')
         formatted_mcap = format_market_cap(raw_mcap, is_tw=is_tw_mkt)
 
         # 目標價
@@ -165,27 +173,27 @@ def fetch_from_yfinance(symbol):
 
         return {
             "symbol": symbol,
-            "name": info.get('longName', TW_STOCK_NAMES.get(symbol, symbol)),
+            "name": TW_STOCK_NAMES.get(symbol, info.get('longName', symbol)),
             "price": price,
-            "changePercent": round(change_p, 2),
+            "changePercent": trunc2(change_p),
             "volume": info.get('regularMarketVolume', info.get('volume', 0)),
             "marketCap": formatted_mcap,
-            "grossMargin": round(gross_margin, 2),
-            "netMargin": round(net_margin, 2),
-            "operatingMargin": round(operating_margin, 2),
+            "grossMargin": trunc2(gross_margin),
+            "netMargin": trunc2(net_margin),
+            "operatingMargin": trunc2(operating_margin),
             "eps": eps,
-            "roe": round(roe, 2),
-            "roa": round(roa, 2),
-            "debtToEquity": round(debt_ratio, 2),
-            "revGrowth": round(rev_growth, 2),
+            "roe": trunc2(roe),
+            "roa": trunc2(roa),
+            "debtToEquity": trunc2(debt_ratio),
+            "revGrowth": trunc2(rev_growth),
             "technicalRating": 0.5 if price > info.get('fiftyDayAverage', price) else -0.5,
             "analystRating": info.get('recommendationMean', 3),
             "targetPrice": target_price,
             "sma50": info.get('fiftyDayAverage', price),
             "sma200": info.get('twoHundredDayAverage', price),
             "fScore": min(9, f_score),
-            "zScore": round(z_score, 2),
-            "grahamNumber": round(graham, 2),
+            "zScore": trunc2(z_score),
+            "grahamNumber": trunc2(graham),
             "source": "yfinance"
         }
     except Exception as e:
@@ -196,6 +204,121 @@ def fetch_from_yfinance(symbol):
     except Exception as e:
         print(f"yfinance error: {e}")
         return None
+
+def fetch_history_from_yfinance(symbol, period="1y", interval="1d", max_points=365):
+    """Fetch OHLCV history for charting from yfinance."""
+    normalized = symbol.strip().upper()
+    candidates = []
+
+    # Strategy: Try specific suffixes based on format
+    if re.match(r'^\d{4,6}$', normalized):
+        candidates = [f"{normalized}.TW", f"{normalized}.TWO"]
+    elif re.search(r'\.TW[O]?$', normalized, re.IGNORECASE):
+        candidates = [normalized]
+    else:
+        # US or other
+        candidates = [normalized]
+
+    for ticker_symbol in candidates:
+        try:
+            # print(f"DEBUG: Fetching history for {ticker_symbol}...")
+            ticker = yf.Ticker(ticker_symbol)
+            # auto_adjust=True often fixes data issues
+            hist = ticker.history(period=period, interval=interval, auto_adjust=True)
+            
+            if hist is None or hist.empty:
+                continue
+
+            hist = hist.reset_index()
+            # Handle different index names (Date vs Datetime)
+            time_col = None
+            for col in ["Date", "Datetime"]:
+                if col in hist.columns:
+                    time_col = col
+                    break
+            
+            if not time_col:
+                continue
+
+            # Convert to list of dicts
+            output = []
+            # Take only needed columns
+            needed_cols = ["Open", "High", "Low", "Close", "Volume"]
+            
+            # Ensure columns exist
+            if not all(col in hist.columns for col in needed_cols):
+                 continue
+
+            rows = hist.tail(max_points).to_dict(orient="records")
+            is_intraday = interval in ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"]
+            
+            for r in rows:
+                try:
+                    ts = r[time_col]
+                    if is_intraday:
+                        if hasattr(ts, "strftime"):
+                            # 分時數據顯示時間即可
+                            date_str = ts.strftime("%H:%M")
+                        else:
+                            # Fallback: manually stringify and extract time if strftime missing
+                            s = str(ts)
+                            # Expecting "YYYY-MM-DD HH:MM:SS"
+                            if ' ' in s:
+                                date_str = s.split(' ')[1][:5]
+                            else:
+                                date_str = s
+                    else:
+                        date_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts).split(' ')[0]
+                    
+                    record = {
+                        "Date": date_str,
+                        "Open": float(r["Open"] or 0),
+                        "High": float(r["High"] or 0),
+                        "Low": float(r["Low"] or 0),
+                        "Close": float(r["Close"] or 0),
+                        "Volume": float(r["Volume"] or 0)
+                    }
+                    
+                    if record["Close"] > 0:
+                        output.append(record)
+                except Exception:
+                    continue
+
+            if output:
+                return output
+                
+        except Exception:
+            continue
+
+    return []
+
+def calculate_rsi(history, period=14):
+    """Calculate RSI from OHLCV history list of dicts."""
+    if not history or len(history) < period + 1:
+        return 50.0
+    
+    closes = [h['Close'] for h in history]
+    gains = []
+    losses = []
+    
+    for i in range(1, len(closes)):
+        diff = closes[i] - closes[i-1]
+        gains.append(max(0, diff))
+        losses.append(max(0, -diff))
+    
+    # Simple average for the first period
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    
+    # Smoothing for the rest
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+        
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return 100.0 - (100.0 / (1.0 + rs))
 
 def process_tvs_row(row, symbol):
     """將 tvscreener 的 row 轉換為標準化的資料格式"""
@@ -226,11 +349,12 @@ def process_tvs_row(row, symbol):
 
     data = {
         "symbol": symbol,
-        "name": display_name,
+        "name": TW_STOCK_NAMES.get(symbol, display_name),
         "price": price,
         "change": get_field(row, ['Change'], 0),
-        "changePercent": get_field(row, ['Change %'], 0),
+        "changePercent": trunc2(get_field(row, ['Change %'], 0)),
         "volume": get_field(row, ['Volume'], 0),
+        "avgVolume": get_field(row, ['Average Volume (10 day)', 'Average Volume (30 day)', StockField.AVERAGE_VOLUME_30_DAY.label], 0),
         "marketCap": formatted_mcap,
         "technicalRating": tech_rating,
         "analystRating": get_field(row, ['Analyst Rating', StockField.RECOMMENDATION_MARK.label], 3),
@@ -249,12 +373,19 @@ def process_tvs_row(row, symbol):
         "operatingMargin": get_field(row, ['Operating Margin (TTM)', 'Operating Margin', StockField.OPERATING_MARGIN_TTM.label], 0),
         "zScore": get_field(row, ['Altman Z-Score (TTM)', 'Altman Z-Score', 'Altman Z‑Score', StockField.ALTMAN_Z_SCORE_TTM.label], 0),
         "eps": eps,
+        "epsGrowth": get_field(row, ['EPS Diluted (TTM YoY Growth)', StockField.EPS_DILUTED_TTM_YOY_GROWTH.label], 0),
+        "peRatio": get_field(row, ['Price to Earnings Ratio (TTM)', StockField.PRICE_TO_EARNINGS_RATIO_TTM.label], 0),
+        "pbRatio": get_field(row, ['Price to Book (MRQ)', StockField.PRICE_TO_BOOK_MRQ.label], 0),
+        "currentRatio": get_field(row, ['Current Ratio (MRQ)', StockField.CURRENT_RATIO_MRQ.label], 0),
+        "quickRatio": get_field(row, ['Quick Ratio (MRQ)', StockField.QUICK_RATIO_MRQ.label], 0),
+        "freeCashFlow": get_field(row, ['Free Cash Flow (TTM)', StockField.FREE_CASH_FLOW_TTM.label], 0),
         "roe": get_field(row, ['Return on Equity (TTM)', 'Return on Equity % (MRQ)', 'Return on Equity', 'RETURN_ON_EQUITY_TTM'], 0),
         "roa": get_field(row, ['Return on Assets (TTM)', 'Return on Assets % (MRQ)', 'Return on Assets', 'RETURN_ON_ASSETS_TTM'], 0),
         "debtToEquity": get_field(row, ['Debt to Equity Ratio (MRQ)', 'Debt to Equity Ratio', 'Debt to Equity FQ', 'DEBT_TO_EQUITY_RATIO_MRQ'], 0),
         "revGrowth": get_field(row, ['Revenue (TTM YoY Growth)', 'Revenue (Annual YoY Growth)', 'REVENUE_TTM_YOY_GROWTH'], 0),
         "netGrowth": get_field(row, ['Net Income (TTM YoY Growth)', 'Net Income (Annual YoY Growth)', 'NET_INCOME_TTM_YOY_GROWTH'], 0),
         "yield": get_field(row, ['Dividend Yield Forward', 'Dividend Yield Recent', 'DIVIDEND_YIELD_RECENT', 'Dividends Yield Recent'], 0),
+        "volatility": get_field(row, ['Volatility'], 0),
         "sector": row.get('Sector', '-'),
         "industry": row.get('Industry', '-'),
         "exchange": row.get('Exchange', '-'),

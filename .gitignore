@@ -25,3 +25,17 @@ run_local_*.py
 *.py.bak
 *.log
 inspection_*.txt
+
+# Output & Logs
+*_output.txt
+*_logs.txt
+*_output_utf8.txt
+api_errors.txt
+response.json
+keys.txt
+reg_out*.txt
+
+# Additional Utils/Test Scripts
+check_history.py
+clear_cache.py
+debug_api.js
