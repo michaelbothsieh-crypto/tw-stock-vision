@@ -258,8 +258,9 @@ def fetch_history_from_yfinance(symbol, period="1y", interval="1d", max_points=3
         try:
             # print(f"DEBUG: Fetching history for {ticker_symbol}...")
             ticker = yf.Ticker(ticker_symbol)
-            # auto_adjust=True often fixes data issues
-            hist = ticker.history(period=period, interval=interval, auto_adjust=True)
+            # [ 性能優化 ] 設置超時限制或重試限制
+            # yfinance 內部可能阻塞，我們確保僅獲取必要的數據點
+            hist = ticker.history(period=period, interval=interval, auto_adjust=True, timeout=5)
             
             if hist is None or hist.empty:
                 continue

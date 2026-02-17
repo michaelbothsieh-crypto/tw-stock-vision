@@ -194,11 +194,17 @@ class StockService:
             if row:
                 cached_data = dict(row[0]) if isinstance(row[0], dict) else {}
                 
-                # Attempt to fetch history, but don't let it crash the main request
+                # [ 性能優化 ] 如果快取中已經有歷史數據，直接返回
+                if cached_data.get("history"):
+                    return sanitize_json(cached_data)
+
+                # 只有在快取中沒有 history 時才嘗試獲取一次
                 try:
                     history = fetch_history_from_yfinance(symbol, period=period, interval=interval)
                     if history:
                         cached_data["history"] = history
+                        # 異步保存包含 history 的完整數據到快取
+                        StockService._save_to_cache(symbol, cached_data)
                 except Exception as e:
                     print(f"Non-critical: History fetch failed for {symbol}: {e}")
                 
