@@ -1,27 +1,7 @@
 {
     "rewrites": [
         {
-            "source": "/api/stock",
-            "destination": "/api/index.py"
-        },
-        {
-            "source": "/api/leaderboard",
-            "destination": "/api/index.py"
-        },
-        {
-            "source": "/api/index",
-            "destination": "/api/index.py"
-        },
-        {
-            "source": "/api/health",
-            "destination": "/api/index.py"
-        },
-        {
-            "source": "/api/evolution",
-            "destination": "/api/index.py"
-        },
-        {
-            "source": "/api/market/trending",
+            "source": "/api/(.*)",
             "destination": "/api/index.py"
         }
     ]
