@@ -7,6 +7,7 @@ import { fmtNum, fmtPct, trunc2 } from '@/lib/visual-utils';
 import { StockData } from './types';
 import { MarketOverview } from './modules/MarketOverview';
 import { FocusMetrics } from './modules/FocusMetrics';
+import { EvolutionDashboard } from '../evolution-dashboard';
 
 
 
@@ -286,6 +287,10 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
                         className="lg:h-full"
                     />
                 </div>
+            </div>
+
+            <div className="order-4 col-span-12 p-4 lg:p-6 bg-zinc-950/20 border-t border-white/5">
+                <EvolutionDashboard />
             </div>
 
             <div className="hidden lg:block">

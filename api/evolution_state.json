@@ -1,0 +1,21 @@
+{
+    "version": "1.0.0",
+    "last_updated": "2026-02-17",
+    "strategies": {
+        "growth_value": {
+            "name": "成長價值模型",
+            "description": "平衡 F-Score 與營收成長的基礎進化模型",
+            "weights": {
+                "fScore": 0.4,
+                "eps_growth": 0.3,
+                "operating_margin": 0.2,
+                "gross_margin": 0.1
+            },
+            "performance_history": []
+        }
+    },
+    "mutation_config": {
+        "learning_rate": 0.05,
+        "evolution_style": "stable"
+    }
+}

@@ -46,7 +46,7 @@ export default function Home() {
     };
 
     return (
-        <main className="fixed inset-0 overflow-hidden bg-[#050505] text-white font-sans">
+        <main className="min-h-screen bg-[#050505] text-white font-sans lg:fixed lg:inset-0 lg:overflow-hidden">
             <Toaster theme="dark" position="top-right" />
 
             {loading ? (

@@ -152,14 +152,23 @@ class handler(BaseHTTPRequestHandler):
             elif 'trending' in q or '/market/trending' in parsed.path: 
                 market = q.get('market', ['TW'])[0]
                 data = StockService.get_market_trending(market)
-                self._set_headers()
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+                self.send_header('Pragma', 'no-cache')
+                self.send_header('Expires', '0')
+                self.end_headers()
                 self.wfile.write(json.dumps(data).encode('utf-8'))
             elif 'symbol' in q: 
                 symbol = q['symbol'][0]
                 period = q.get('period', ['1y'])[0]
                 interval = q.get('interval', ['1d'])[0]
-                flush = q.get('flush', ['false'])[0].lower() == 'true'
-                data = StockService.get_stock_details(symbol, period, interval, flush)
+                # flush = q.get('flush', ['false'])[0].lower() == 'true'
+                
+                from api.services.agent_tools import StockAgentTools
+                data = StockAgentTools.fetch_comprehensive_data(symbol, period, interval)
+                
                 self._set_headers()
                 if data:
                     self.wfile.write(json.dumps(data).encode('utf-8'))
@@ -167,16 +176,37 @@ class handler(BaseHTTPRequestHandler):
                     self.wfile.write(json.dumps({"error": "Unable to fetch data", "symbol": symbol}).encode('utf-8'))
             elif parsed.path.endswith('/health'):
                 self._set_headers()
-                self.wfile.write(json.dumps({"status": "ok"}).encode('utf-8'))
+                from api.services.evolution_manager import EvolutionManager
+                EvolutionManager.log_anomaly("HEALTH_CHECK", "API health endpoint accessed")
+                self.wfile.write(json.dumps({"status": "ok", "evolution": "active"}).encode('utf-8'))
+            elif parsed.path.endswith('/evolution'):
+                self._set_headers()
+                from api.services.reflection_engine import ReflectionEngine
+                state = ReflectionEngine.load_state()
+                self.wfile.write(json.dumps(state).encode('utf-8'))
             else:
                 self._set_headers()
                 self.wfile.write(json.dumps({"error": "Not Found"}).encode('utf-8'))
         except Exception as e:
             import sys
             import traceback
+            from api.services.evolution_manager import EvolutionManager
+            EvolutionManager.log_anomaly("CRITICAL_ERROR", str(e), {"trace": traceback.format_exc()})
             print(f"CRITICAL ERROR in do_GET: {str(e)}", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
             self.send_response(500)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({"error": "Internal Server Error", "details": str(e)}).encode('utf-8'))
+
+if __name__ == '__main__':
+    from http.server import HTTPServer
+    port = 8000
+    server_address = ('', port)
+    httpd = HTTPServer(server_address, handler)
+    print(f"Starting local dev server on port {port}...")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopping server...")
+        httpd.server_close()

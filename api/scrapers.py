@@ -2,8 +2,48 @@ import math
 import tvscreener as tvs
 from tvscreener import StockScreener, StockField
 import yfinance as yf
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import re
 from api.constants import TW_STOCK_NAMES, SECTOR_TRANSLATIONS, EXCHANGE_TRANSLATIONS
+from api.db import get_db_connection, return_db_connection
+
+def get_session():
+    session = requests.Session()
+    retry = Retry(connect=3, backoff_factor=0.5)
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    session.verify = False  # Disable SSL verification to fix 500 error
+    return session
+
+
+def get_stock_name(symbol, default=None):
+    """
+    Get stock name from memory constant or DB.
+    """
+    # 1. Try memory first
+    if symbol in TW_STOCK_NAMES:
+        return TW_STOCK_NAMES[symbol]
+    
+    # 2. Try DB
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT name FROM stock_names WHERE symbol = %s", (symbol,))
+            row = cur.fetchone()
+            if row and row[0]:
+                return row[0]
+        except:
+            pass
+        finally:
+            return_db_connection(conn)
+    
+    return default or symbol
+
+
 
 def trunc2(value):
     """Truncate to 2 decimals without rounding (finance style)."""
@@ -96,7 +136,7 @@ def fetch_from_yfinance(symbol):
                             price = float(hist['Close'].iloc[-1])
                             return {
                                 "symbol": symbol,
-                                "name": TW_STOCK_NAMES.get(symbol, f"台股 {symbol}"),
+                                "name": get_stock_name(symbol, f"台股 {symbol}"),
                                 "price": price,
                                 "change": 0,
                                 "changePercent": 0,
@@ -173,7 +213,7 @@ def fetch_from_yfinance(symbol):
 
         return {
             "symbol": symbol,
-            "name": TW_STOCK_NAMES.get(symbol, info.get('longName', symbol)),
+            "name": get_stock_name(symbol, info.get('longName', symbol)),
             "price": price,
             "changePercent": trunc2(change_p),
             "volume": info.get('regularMarketVolume', info.get('volume', 0)),
@@ -196,11 +236,6 @@ def fetch_from_yfinance(symbol):
             "grahamNumber": trunc2(graham),
             "source": "yfinance"
         }
-    except Exception as e:
-        print(f"yfinance error: {e}")
-        return None
-        print(f"yfinance error: {e}")
-        return None
     except Exception as e:
         print(f"yfinance error: {e}")
         return None
@@ -349,7 +384,7 @@ def process_tvs_row(row, symbol):
 
     data = {
         "symbol": symbol,
-        "name": TW_STOCK_NAMES.get(symbol, display_name),
+        "name": get_stock_name(symbol, display_name),
         "price": price,
         "change": get_field(row, ['Change'], 0),
         "changePercent": trunc2(get_field(row, ['Change %'], 0)),
@@ -379,12 +414,12 @@ def process_tvs_row(row, symbol):
         "currentRatio": get_field(row, ['Current Ratio (MRQ)', StockField.CURRENT_RATIO_MRQ.label], 0),
         "quickRatio": get_field(row, ['Quick Ratio (MRQ)', StockField.QUICK_RATIO_MRQ.label], 0),
         "freeCashFlow": get_field(row, ['Free Cash Flow (TTM)', StockField.FREE_CASH_FLOW_TTM.label], 0),
-        "roe": get_field(row, ['Return on Equity (TTM)', 'Return on Equity % (MRQ)', 'Return on Equity', 'RETURN_ON_EQUITY_TTM'], 0),
+        "roe": get_field(row, ['Return on Equity (TTM)', 'Return on Equity % (MRQ)', 'Return on Equity', 'RETURN_ON_EQUITY_TTM', 'Return on assets (TTM)'], 0),
         "roa": get_field(row, ['Return on Assets (TTM)', 'Return on Assets % (MRQ)', 'Return on Assets', 'RETURN_ON_ASSETS_TTM'], 0),
-        "debtToEquity": get_field(row, ['Debt to Equity Ratio (MRQ)', 'Debt to Equity Ratio', 'Debt to Equity FQ', 'DEBT_TO_EQUITY_RATIO_MRQ'], 0),
-        "revGrowth": get_field(row, ['Revenue (TTM YoY Growth)', 'Revenue (Annual YoY Growth)', 'REVENUE_TTM_YOY_GROWTH'], 0),
-        "netGrowth": get_field(row, ['Net Income (TTM YoY Growth)', 'Net Income (Annual YoY Growth)', 'NET_INCOME_TTM_YOY_GROWTH'], 0),
-        "yield": get_field(row, ['Dividend Yield Forward', 'Dividend Yield Recent', 'DIVIDEND_YIELD_RECENT', 'Dividends Yield Recent'], 0),
+        "debtToEquity": get_field(row, ['Debt to Equity Ratio (MRQ)', 'Total debt over total equity (MRQ)', 'Debt to Equity Ratio', 'Debt to Equity FQ', 'DEBT_TO_EQUITY_RATIO_MRQ'], 0),
+        "revGrowth": get_field(row, ['Revenue (TTM YoY Growth)', 'Revenue growth (TTM YoY)', 'Revenue (Annual YoY Growth)', 'REVENUE_TTM_YOY_GROWTH'], 0),
+        "netGrowth": get_field(row, ['Net Income (TTM YoY Growth)', 'Net income growth (TTM YoY)', 'Net Income (Annual YoY Growth)', 'NET_INCOME_TTM_YOY_GROWTH'], 0),
+        "yield": get_field(row, ['Dividend Yield Forward', 'Dividend Yield Recent', 'DIVIDEND_YIELD_RECENT', 'Dividends Yield Recent', 'Dividend yield - recent'], 0),
         "volatility": get_field(row, ['Volatility'], 0),
         "sector": row.get('Sector', '-'),
         "industry": row.get('Industry', '-'),

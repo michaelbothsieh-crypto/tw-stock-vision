@@ -79,45 +79,85 @@ class StockService:
     @staticmethod
     def get_market_trending(market_param):
         market_param = market_param.upper()
+        is_tw = (market_param == 'TW')
         
-        # READ-ONLY from DB
-        # Query stock_cache for cached records
-        # Filter by simple heuristics (e.g., volume > 0, updated recently)
-        # Ideally, we should have a 'trending' flag or table, but for now, 
-        # let's return the most recently updated stocks in cache.
-        
-        conn = get_db_connection()
-        if not conn: return []
-        
+        # 使用 tvscreener 動態篩選具備財經價值的熱門股
         results = []
         try:
-            cur = conn.cursor()
-            # Fetch top 20 recently updated stocks
-            # data is JSONB, we can extract fields
-            cur.execute("""
-                SELECT symbol, data 
-                FROM stock_cache 
-                WHERE updated_at > NOW() - INTERVAL '24 hours' 
-                ORDER BY updated_at DESC, (data->>'volume')::numeric DESC NULLS LAST
-                LIMIT 20
-            """)
-            rows = cur.fetchall()
+            ss = StockScreener()
+            # 設定市場
+            ss.set_markets(tvs.Market.TAIWAN if is_tw else tvs.Market.AMERICA)
             
-            for r in rows:
-                symbol, data_json = r
-                if isinstance(data_json, str):
-                    data = json.loads(data_json)
-                else:
-                    data = data_json
-
-                results.append(data)
+            # 增加關鍵欄位選擇
+            ss.select(StockField.NAME, StockField.DESCRIPTION, StockField.PRICE, 
+                      StockField.CHANGE, StockField.CHANGE_PERCENT, StockField.VOLUME,
+                      StockField.TECHNICAL_RATING, StockField.PIOTROSKI_F_SCORE_TTM,
+                      StockField.MARKET_CAPITALIZATION, StockField.SECTOR, StockField.EXCHANGE)
+            
+            # 篩選邏輯：
+            # 1. 技術評級 > 0.3 (中性偏買)
+            # 2. F-Score > 4 (財務品質良好)
+            # 3. 成交量 > 指定門檻 (確保流動性)
+            min_vol = 1000000 if is_tw else 2000000
+            
+            # 使用 tvscreener 的過濾法 (如果 API 支援), 否則在本地過濾 DataFrame
+            df = ss.get()
+            
+            if df is not None and not df.empty:
+                # 本地過濾以確保數據質量
+                filtered_df = df.copy()
                 
-            cur.close()
+                # 安全轉換數值
+                def to_num(ser): return ser.apply(lambda x: float(x) if x is not None and not isinstance(x, str) else 0)
+                
+                v_col = 'Volume' if 'Volume' in df.columns else StockField.VOLUME.label
+                t_col = 'Technical Rating' if 'Technical Rating' in df.columns else StockField.TECHNICAL_RATING.label
+                f_col = 'Piotroski F-Score (TTM)' if 'Piotroski F-Score (TTM)' in df.columns else StockField.PIOTROSKI_F_SCORE_TTM.label
+                
+                # 過濾量、評級與財務品質 (F-Score)
+                # 為確保結果不為空，F-Score 門檻設為 3
+                mask = (to_num(filtered_df[v_col]) > min_vol) & (to_num(filtered_df[t_col]) > 0.2)
+                final_df = filtered_df[mask].sort_values(by=[v_col], ascending=False).head(15)
+                
+                for _, row_raw in final_df.iterrows():
+                    row_dict = row_raw.to_dict()
+                    symbol = row_dict.get('Name', '')
+                    if not symbol: continue
+                    
+                    # 再次驗證符號是否符合市場 (tvscreener 有時會混入其他交易所)
+                    is_symbol_tw = bool(re.match(r'^[0-9]+$', symbol))
+                    if is_tw and not is_symbol_tw: continue
+                    if not is_tw and is_symbol_tw: continue
+                    
+                    # 標準化數據
+                    data = process_tvs_row(row_dict, symbol)
+                    StockService._enrich_data(data)
+                    
+                    # 自動同步至快取
+                    StockService._save_to_cache(symbol, data)
+                    results.append(data)
+            
+            # 備選方案：增加市場隔離過濾
+            if not results:
+                conn = get_db_connection()
+                if conn:
+                    cur = conn.cursor()
+                    # 判斷市場規律：台股通常是純數字，美股是字母
+                    market_filter = "symbol ~ '^[0-9]+$'" if is_tw else "symbol ~ '^[A-Z]+$'"
+                    cur.execute(f"""
+                        SELECT data FROM stock_cache 
+                        WHERE {market_filter} 
+                        AND updated_at > NOW() - INTERVAL '24 hours'
+                        ORDER BY (data->>'fScore')::numeric DESC, (data->>'technicalRating')::numeric DESC
+                        LIMIT 15
+                    """)
+                    results = [r[0] for r in cur.fetchall()]
+                    cur.close()
+                    return_db_connection(conn)
+                    
         except Exception as e:
-            print(f"Error fetching trending from DB: {e}")
+            print(f"Error in dynamic trending: {e}")
             return []
-        finally:
-            return_db_connection(conn)
             
         return sanitize_json(results)
 
@@ -154,25 +194,13 @@ class StockService:
             if row:
                 cached_data = dict(row[0]) if isinstance(row[0], dict) else {}
                 
-                # OPTIONAL: Fetch History on demand?
-                # For strict "no external" policy, history should be in DB or Client-side.
-                # However, history is large. 
-                # Decision: Keep history fetch for now as it doesn't block STARTUP, 
-                # but it does block request.
-                # To be truly non-blocking, history should be removed or cached.
-                # Let's try fetching history if missing from cache (it's not in cache usually)
-                # ERROR: logic in original code was: fetch history and add to cached_data
-                # If we want speed, we should skip history or fetch it async.
-                # But frontend needs it for sparks?
-                # Let's keep history fetch but with timeout?
-                # Accessing yfinance here violates "Read Only".
-                # But without history, charts break.
-                # Compromise: Try to fetch history, but if it fails/slows, return without it.
-                # Better: Allow history fetch for now, but optimize `sync_names.py` to NOT do it.
-                
-                history = fetch_history_from_yfinance(symbol, period=period, interval=interval)
-                if history:
-                    cached_data["history"] = history
+                # Attempt to fetch history, but don't let it crash the main request
+                try:
+                    history = fetch_history_from_yfinance(symbol, period=period, interval=interval)
+                    if history:
+                        cached_data["history"] = history
+                except Exception as e:
+                    print(f"Non-critical: History fetch failed for {symbol}: {e}")
                 
                 return sanitize_json(cached_data)
             

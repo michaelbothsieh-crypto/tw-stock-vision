@@ -6,7 +6,9 @@
         "dev": "next dev",
         "build": "next build",
         "start": "next start",
-        "lint": "next lint"
+        "lint": "next lint",
+        "test:frontend": "vitest run",
+        "test:backend": "pytest"
     },
     "dependencies": {
         "@radix-ui/react-tooltip": "^1.2.8",
