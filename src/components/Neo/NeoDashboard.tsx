@@ -31,15 +31,36 @@ const PERIOD_MAP: Record<PeriodKey, { period: string; interval: string }> = {
 
 
 
+const HOLIDAYS_2026 = [
+    '2026-01-01', // 元旦
+    '2026-02-16', '2026-02-17', '2026-02-18', '2026-02-19', '2026-02-20', // 春節
+    '2026-02-28', // 228
+    '2026-04-03', '2026-04-06', // 清明
+    '2026-05-01', // 勞動節
+    '2026-06-19', // 端午
+    '2026-09-25', // 中秋
+    '2026-10-10', // 國慶
+];
+
 const getMarketStatus = (market: 'TW' | 'US') => {
     const now = new Date();
     const day = now.getDay(); // 0(Sun) - 6(Sat)
-    const hour = now.getHours();
-    const min = now.getMinutes();
-    const timeVal = hour * 100 + min;
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const date = String(now.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${date}`;
 
     // 週末非交易日
     if (day === 0 || day === 6) return { label: '週末休市', isOpen: false };
+
+    // 國定假日 (僅適用台股，美股需另外定義但暫時共用邏輯或忽略)
+    if (market === 'TW' && HOLIDAYS_2026.includes(dateStr)) {
+        return { label: '國定休市', isOpen: false };
+    }
+
+    const hour = now.getHours();
+    const min = now.getMinutes();
+    const timeVal = hour * 100 + min;
 
     if (market === 'TW') {
         // 台股: 09:00 - 13:30 (開盤), 13:30 - 14:30 (盤後)
