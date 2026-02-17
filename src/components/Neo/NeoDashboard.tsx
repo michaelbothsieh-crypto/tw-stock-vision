@@ -243,7 +243,7 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
                                 <span className="animate-pulse font-mono text-xs text-emerald-500">載入歷史數據中 (FETCHING)...</span>
                             </div>
                         ) : (
-                            <div className="h-[300px] w-full lg:h-[calc(100%-40px)]">
+                            <div className="h-[300px] w-full lg:h-[calc(100%-40px)]" style={{ touchAction: 'pan-y' }}>
                                 <StockChart data={chartData} color={selectedStock?.changePercent >= 0 ? '#10b981' : '#f43f5e'} />
                             </div>
                         )}

@@ -47,12 +47,19 @@
     @apply border-border;
   }
 
+  html {
+    overflow-y: auto;
+    height: 100%;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     text-rendering: optimizeLegibility;
     overflow-y: auto;
-    height: auto;
+    min-height: 100%;
   }
 
   h1,
