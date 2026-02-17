@@ -19,9 +19,15 @@ export default function Home() {
                 const res = await fetch(`/api/stock?trending=true&market=${market}`)
                 if (!res.ok) throw new Error('Failed to fetch trending data')
                 const fetchedData = await res.json()
-                setData(fetchedData)
-                if (fetchedData.length > 0) {
-                    setSelectedSymbol(fetchedData[0].symbol);
+
+                if (Array.isArray(fetchedData)) {
+                    setData(fetchedData)
+                    if (fetchedData.length > 0) {
+                        setSelectedSymbol(fetchedData[0].symbol);
+                    }
+                } else {
+                    console.error("API returned non-array:", fetchedData)
+                    setData([])
                 }
             } catch (error) {
                 console.error("Failed to boot system:", error)
