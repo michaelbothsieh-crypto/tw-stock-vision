@@ -47,7 +47,7 @@ export const FocusMetrics = ({ stock, detailedName, chartData }: { stock: StockD
     }, [stock]);
 
     return (
-        <div className="flex h-full flex-col p-6 font-mono custom-scrollbar overflow-y-auto">
+        <div className="flex flex-col p-6 font-mono custom-scrollbar lg:h-full lg:overflow-y-auto">
             <div className="mb-6 flex items-start justify-between">
                 <div className="flex-1">
                     <Badge variant="outline" className="mb-2 border-emerald-500/30 bg-emerald-500/10 text-emerald-500">即時 (LIVE)</Badge>

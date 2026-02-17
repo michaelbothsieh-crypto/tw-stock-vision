@@ -140,6 +140,13 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
     const [loadingChart, setLoadingChart] = useState(false);
     const [detailBySymbol, setDetailBySymbol] = useState<Record<string, Partial<StockData>>>({});
     const [periodKey, setPeriodKey] = useState<PeriodKey>('1Y');
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const handleSearch = (term: string) => {
+        if (!term) return;
+        onSelect(term);
+        setSearchTerm('');
+    };
 
     const enrichedData = useMemo(
         () => data.map((item) => ({ ...item, ...(detailBySymbol[item.symbol] || {}) })),
@@ -197,10 +204,33 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
     }
 
     return (
-        <div className="flex min-h-screen flex-col overflow-hidden bg-[#050505] text-white selection:bg-emerald-500/30 lg:h-screen">
+        <div className="flex min-h-screen flex-col bg-[#050505] text-white selection:bg-emerald-500/30 lg:h-screen lg:overflow-hidden">
             <TerminalHeader lastUpdate={time} market={market} />
 
-            <div className="flex flex-1 flex-col overflow-y-auto pb-16 lg:grid lg:grid-cols-12 lg:overflow-hidden lg:pb-8">
+            {/* Mobile Search Bar - Sticky Top */}
+            <div className="sticky top-0 z-30 block border-b border-white/10 bg-zinc-900/80 p-2 backdrop-blur lg:hidden">
+                <div className="relative">
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value.toUpperCase())}
+                        placeholder="搜尋代號 (如 2330, NVDA)..."
+                        className="w-full rounded bg-zinc-950 py-2 pl-9 pr-4 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchTerm)}
+                    />
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                    >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </div>
+            </div>
+
+            <div className="flex flex-1 flex-col pb-16 lg:grid lg:grid-cols-12 lg:overflow-hidden lg:pb-8">
                 {/* Mobile Order: 1. Chart, 2. Metrics, 3. List */}
 
                 {/* 1. Chart Area (Mobile First Order) */}
@@ -244,12 +274,16 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
 
                 {/* 3. Market Overview */}
                 <div className="order-3 min-h-[400px] bg-zinc-950/50 lg:order-3 lg:col-span-3 lg:h-full lg:overflow-hidden">
+                    <div className="lg:hidden p-4 text-center text-xs text-zinc-500">
+                        ↓ 下方為市場總覽列表 ↓
+                    </div>
                     <MarketOverview
                         data={enrichedData}
                         onSelect={onSelect}
                         currentSymbol={selectedStock?.symbol}
                         market={market}
                         onMarketChange={onMarketChange}
+                        className="h-full"
                     />
                 </div>
             </div>

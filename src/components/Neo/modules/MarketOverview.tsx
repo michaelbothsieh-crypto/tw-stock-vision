@@ -9,16 +9,18 @@ export const MarketOverview = ({
     onSelect,
     currentSymbol,
     market,
-    onMarketChange
+    onMarketChange,
+    className
 }: {
     data: StockData[];
     onSelect: (s: string) => void;
     currentSymbol: string;
     market: 'TW' | 'US';
     onMarketChange: (m: 'TW' | 'US') => void;
+    className?: string;
 }) => {
     return (
-        <div className="flex h-full flex-col overflow-hidden border-l border-white/10 bg-zinc-950/50">
+        <div className={cn("flex flex-col border-l border-white/10 bg-zinc-950/50 lg:h-full lg:overflow-hidden", className)}>
             <div className="flex items-center justify-between border-b border-white/10 bg-black/20 p-2">
                 <div className="font-mono text-[10px] tracking-wider text-zinc-500">市場總覽 (MARKET OVERVIEW)</div>
                 <div className="flex rounded bg-black/40 p-0.5">
@@ -43,8 +45,8 @@ export const MarketOverview = ({
                 </div>
             </div>
 
-            {/* 搜尋欄位 */}
-            <div className="border-b border-white/5 bg-black/20 p-2">
+            {/* 搜尋欄位 (Desktop Only) */}
+            <div className="hidden border-b border-white/5 bg-black/20 p-2 lg:block">
                 <div className="relative">
                     <input
                         type="text"
@@ -85,7 +87,7 @@ export const MarketOverview = ({
                 </p>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2 icon-scrollbar">
+            <div className="flex-1 p-2 icon-scrollbar lg:overflow-y-auto">
                 <div className="space-y-1">
                     {data.map((stock) => (
                         <motion.div
