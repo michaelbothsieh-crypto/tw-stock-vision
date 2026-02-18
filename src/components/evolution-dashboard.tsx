@@ -6,6 +6,18 @@ import { Brain, Zap, History, ChevronRight, Activity, Target } from "lucide-reac
 import { AI_RadarChart } from "./ui/radar-chart"
 import { cn } from "@/lib/utils"
 
+interface PerformanceTracking {
+    total_predictions: number
+    resolved: number
+    pending: number
+    accuracy_stats: {
+        accuracy: number | null
+        sample_size: number
+        avg_return: number | null
+        message?: string
+    }
+}
+
 interface EvolutionState {
     version: string
     last_updated: string
@@ -15,6 +27,18 @@ interface EvolutionState {
             description: string
             weights: { [key: string]: number }
             performance_history: any[]
+        }
+    }
+    performance_tracking?: PerformanceTracking
+    market_regime?: string
+    strategy_config?: {
+        strategies: {
+            [key: string]: {
+                name?: string
+                rsi_threshold?: number
+                f_score_min?: number
+                weights?: { [key: string]: number }
+            }
         }
     }
 }
@@ -72,8 +96,20 @@ export function EvolutionDashboard() {
                             <p className="text-xs text-zinc-500 font-medium uppercase tracking-widest mt-0.5">Strategy Version {state.version}</p>
                         </div>
                     </div>
-                    <div className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold flex items-center gap-1.5 animate-pulse">
-                        <Activity className="h-3 w-3" /> LIVE EVOLUTION
+                    <div className="flex gap-2">
+                        {state.market_regime && (
+                            <div className={cn(
+                                "px-3 py-1 rounded-full border text-[10px] font-bold flex items-center gap-1.5 uppercase",
+                                state.market_regime === 'bull' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" :
+                                    state.market_regime === 'bear' ? "bg-rose-500/10 border-rose-500/20 text-rose-400" :
+                                        "bg-zinc-500/10 border-zinc-500/20 text-zinc-400"
+                            )}>
+                                <Activity className="h-3 w-3" /> {state.market_regime} MARKET
+                            </div>
+                        )}
+                        <div className="px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold flex items-center gap-1.5 animate-pulse">
+                            <Zap className="h-3 w-3" /> LIVE
+                        </div>
                     </div>
                 </div>
 
@@ -86,6 +122,24 @@ export function EvolutionDashboard() {
                             <span className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">當前模型</span>
                             <div className="text-lg font-bold text-primary">{mainStrategy.name}</div>
                             <p className="text-xs text-zinc-400 mt-1 leading-relaxed">{mainStrategy.description}</p>
+
+                            {/* Dynamic Parameters Display */}
+                            {state.strategy_config?.strategies?.growth_value && (
+                                <div className="mt-3 pt-3 border-t border-white/5 grid grid-cols-2 gap-2">
+                                    <div>
+                                        <span className="text-[9px] text-zinc-600 block">RSI THRESHOLD</span>
+                                        <span className="text-xs font-mono text-zinc-300">
+                                            &lt; {state.strategy_config.strategies.growth_value.rsi_threshold || 70}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-[9px] text-zinc-600 block">F-SCORE MIN</span>
+                                        <span className="text-xs font-mono text-zinc-300">
+                                            &gt;= {state.strategy_config.strategies.growth_value.f_score_min || 5}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                             {Object.entries(mainStrategy.weights).map(([key, val]) => (
@@ -98,6 +152,69 @@ export function EvolutionDashboard() {
                     </div>
                 </div>
             </div>
+
+            {/* 3. Performance Tracking — 進化閃環觀察資料 */}
+            {state?.performance_tracking && (
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="col-span-2 rounded-[2rem] border border-zinc-800 bg-zinc-900/40 p-6 backdrop-blur-xl"
+                >
+                    <h3 className="text-sm font-bold flex items-center gap-2 mb-4 text-zinc-300">
+                        <Target className="h-4 w-4 text-primary" />
+                        進化閃環—預測準確率追蹤
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="p-4 rounded-2xl bg-black/30 border border-white/5">
+                            <span className="text-[10px] text-zinc-500 font-bold block mb-1">TOTAL PREDICTIONS</span>
+                            <span className="text-2xl font-mono font-bold text-zinc-200">
+                                {state.performance_tracking.total_predictions}
+                            </span>
+                        </div>
+                        <div className="p-4 rounded-2xl bg-black/30 border border-white/5">
+                            <span className="text-[10px] text-zinc-500 font-bold block mb-1">RESOLVED</span>
+                            <span className="text-2xl font-mono font-bold text-zinc-200">
+                                {state.performance_tracking.resolved}
+                            </span>
+                        </div>
+                        <div className="p-4 rounded-2xl bg-black/30 border border-white/5">
+                            <span className="text-[10px] text-zinc-500 font-bold block mb-1">ACCURACY</span>
+                            {state.performance_tracking.accuracy_stats.accuracy !== null ? (
+                                <span className={cn(
+                                    "text-2xl font-mono font-bold",
+                                    state.performance_tracking.accuracy_stats.accuracy >= 0.6
+                                        ? "text-emerald-400"
+                                        : state.performance_tracking.accuracy_stats.accuracy >= 0.4
+                                            ? "text-amber-400"
+                                            : "text-rose-400"
+                                )}>
+                                    {(state.performance_tracking.accuracy_stats.accuracy * 100).toFixed(1)}%
+                                </span>
+                            ) : (
+                                <span className="text-sm text-zinc-600 font-mono">
+                                    {state.performance_tracking.accuracy_stats.message || '樣本不足'}
+                                </span>
+                            )}
+                        </div>
+                        <div className="p-4 rounded-2xl bg-black/30 border border-white/5">
+                            <span className="text-[10px] text-zinc-500 font-bold block mb-1">AVG RETURN</span>
+                            {state.performance_tracking.accuracy_stats.avg_return !== null ? (
+                                <span className={cn(
+                                    "text-2xl font-mono font-bold",
+                                    (state.performance_tracking.accuracy_stats.avg_return ?? 0) >= 0
+                                        ? "text-emerald-400"
+                                        : "text-rose-400"
+                                )}>
+                                    {(state.performance_tracking.accuracy_stats.avg_return ?? 0) >= 0 ? '+' : ''}
+                                    {state.performance_tracking.accuracy_stats.avg_return?.toFixed(2)}%
+                                </span>
+                            ) : (
+                                <span className="text-sm text-zinc-600 font-mono">—</span>
+                            )}
+                        </div>
+                    </div>
+                </motion.div>
+            )}
 
             {/* 2. Evolution Logs */}
             <div className="rounded-[2rem] border border-zinc-800 bg-zinc-900/40 p-8 backdrop-blur-xl shadow-2xl relative overflow-hidden flex flex-col">

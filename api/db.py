@@ -24,7 +24,8 @@ def load_env_if_needed():
                                 os.environ[key] = value
                     break
                 current = os.path.dirname(current)
-        except:
+        except Exception as e:
+            print(f"[db] Failed to load .env: {e}")
             pass
 
 def get_db_connection():
@@ -58,7 +59,8 @@ def get_db_connection():
                     db_alive = False
                 try:
                     return psycopg2.connect(db_url, connect_timeout=10)
-                except:
+                except Exception as e:
+                    print(f"[db] Direct connect fallback error: {e}")
                     return None
     
     try:

@@ -15,27 +15,26 @@ class StockAgentTools:
         """
         # [ 進化邏輯 ] 根據歷史記憶決定初始來源
         preferred_source = EvolutionManager.suggest_source(symbol)
-        
+
         # 第一步：嘗試獲取基本數據
         data = StockService.get_stock_details(symbol, period, interval)
-        
-        # 檢查關鍵欄位 (依照 auto-skill 經驗)
+
+        # ✅ 修復：只有 None 才算缺失，0 是合法值（例如 F-Score=0 代表財務差，不是資料缺失）
         required_fields = ["fScore", "eps", "zScore", "targetPrice"]
-        missing = [f for f in required_fields if not data or data.get(f) is None or data.get(f) == 0]
-        
+        missing = [f for f in required_fields if not data or data.get(f) is None]
+
         if missing:
             EvolutionManager.log_anomaly(
-                "DATA_MISSING", 
-                f"股票 {symbol} 缺失關鍵欄位: {missing} (來源: {preferred_source})", 
+                "DATA_MISSING",
+                f"股票 {symbol} 缺失關鍵欄位: {missing} (來源: {preferred_source})",
                 {"symbol": symbol, "missing_fields": missing, "source": preferred_source}
             )
-            
+
             # [ 自癒閉環 ] 若首選來源失敗且非 yfinance，嘗試切換
             if preferred_source != "yfinance":
                 print(f"[Evolution] Detecting missing data for {symbol}, triggering self-healing via yfinance...")
-                # 強制使用 flush 模式且可能觸發 yfinance 深度抓取
                 data = StockService.get_stock_details(symbol, period, interval, flush=True)
-            
+
         return data
 
     @staticmethod

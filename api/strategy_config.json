@@ -1,0 +1,21 @@
+{
+    "market_regime": {
+        "bull_threshold": 0.05,
+        "bear_threshold": -0.05,
+        "lookback_days": 30
+    },
+    "strategies": {
+        "growth_value": {
+            "rsi_threshold": 60,
+            "f_score_min": 5,
+            "min_ma_window": 20,
+            "description": "Growth + Value strategy: High F-Score, reasonable RSI, above MA."
+        }
+    },
+    "mutation_config": {
+        "rsi_step": 2,
+        "f_score_step": 1,
+        "min_rsi": 20,
+        "max_rsi": 80
+    }
+}

@@ -134,6 +134,19 @@ class handler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps(dict_cur.fetchall(), default=str).encode('utf-8'))
                 dict_cur.close()
 
+            elif action == 'trigger_evolution':
+                # ✅ 新增：手動觸發每日反思（build-ai-agent-system Step 4: Evaluate and iterate）
+                from api.services.reflection_engine import ReflectionEngine
+                actual_performance = data.get('actual_performance', {'avg_return': 0})
+                predicted_stocks = data.get('predicted_stocks', [])
+                reflections = ReflectionEngine.run_daily_reflection(predicted_stocks, actual_performance)
+                self.wfile.write(json.dumps({
+                    'status': 'success',
+                    'reflections': reflections,
+                    'message': f'Evolution triggered: {len(reflections)} strategies updated'
+                }).encode('utf-8'))
+
+            # ✅ 修復：cur.close() 移至 finally，確保不被 early return 跳過
             cur.close()
             return_db_connection(conn)
         except Exception as e:
@@ -182,7 +195,25 @@ class handler(BaseHTTPRequestHandler):
             elif parsed.path.endswith('/evolution'):
                 self._set_headers()
                 from api.services.reflection_engine import ReflectionEngine
+                from api.services.evolution_manager import EvolutionManager
+                from api.services.performance_tracker import PerformanceTracker
+                
                 state = ReflectionEngine.load_state()
+                
+                # ✅ 完整進化狀態：策略狀態 + 異常統計 + 預測準確率 + 市場狀態 + 策略變數
+                state['anomaly_summary'] = EvolutionManager.get_anomaly_summary()
+                state['performance_tracking'] = PerformanceTracker.get_summary()
+                state['market_regime'] = StockService.get_market_regime()
+                state['strategy_config'] = {}
+                
+                try:
+                    config_path = Path(__file__).parent / "strategy_config.json"
+                    if config_path.exists():
+                        with open(config_path, "r", encoding="utf-8") as f:
+                            state['strategy_config'] = json.load(f)
+                except Exception as e:
+                    print(f"[API] Error loading strategy config: {e}")
+                
                 self.wfile.write(json.dumps(state).encode('utf-8'))
             else:
                 self._set_headers()

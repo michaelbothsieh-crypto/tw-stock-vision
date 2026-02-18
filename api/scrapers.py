@@ -15,7 +15,10 @@ def get_session():
     adapter = HTTPAdapter(max_retries=retry)
     session.mount('http://', adapter)
     session.mount('https://', adapter)
-    session.verify = False  # Disable SSL verification to fix 500 error
+    # ✅ 安全修復：預設啟用 SSL 驗證，僅在明確設定環境變數時才停用（用於本地開發除錯）
+    if os.environ.get('DISABLE_SSL_VERIFY', '').lower() == 'true':
+        session.verify = False
+        print("[Security] WARNING: SSL verification disabled via DISABLE_SSL_VERIFY env var")
     return session
 
 
@@ -36,8 +39,8 @@ def get_stock_name(symbol, default=None):
             row = cur.fetchone()
             if row and row[0]:
                 return row[0]
-        except:
-            pass
+        except Exception as e:
+            print(f"[scrapers] get_stock_name DB error for {symbol}: {e}")
         finally:
             return_db_connection(conn)
     
@@ -160,7 +163,8 @@ def fetch_from_yfinance(symbol):
                                 "grahamNumber": price * 0.9,
                                 "source": "yf-hist"
                             }
-                except:
+                except Exception as e:
+                    print(f"[scrapers] Fuzzy search error for {symbol}: {e}")
                     continue
         else:
             t = yf.Ticker(ticker_symbol)

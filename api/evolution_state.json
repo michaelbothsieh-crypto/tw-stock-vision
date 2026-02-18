@@ -1,6 +1,7 @@
 {
     "version": "1.0.0",
-    "last_updated": "2026-02-17",
+    "initialized_at": "2026-02-18",
+    "last_reflection": null,
     "strategies": {
         "growth_value": {
             "name": "成長價值模型",

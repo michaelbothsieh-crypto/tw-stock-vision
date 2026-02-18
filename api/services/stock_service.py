@@ -1,13 +1,51 @@
 import re
 import json
 import math
+import time
+import threading
 import tvscreener as tvs
 from tvscreener import StockScreener, StockField
 from api.db import get_db_connection, return_db_connection
 from api.constants import TW_STOCK_NAMES
 from api.scrapers import fetch_from_yfinance, fetch_history_from_yfinance, sanitize_json, get_field, process_tvs_row, trunc2, calculate_rsi
+from api.scrapers import fetch_from_yfinance, fetch_history_from_yfinance, sanitize_json, get_field, process_tvs_row, trunc2, calculate_rsi
 from concurrent.futures import ThreadPoolExecutor
-import time
+from api.services.market_regime import MarketRegimeDetector
+from pathlib import Path
+
+# Initialize Regime Detector (Singleton-like)
+_MARKET_REGIME = MarketRegimeDetector()
+
+
+# ============================================================
+# 記憶體快取層（In-Memory Cache）
+# Serverless 友好：模組級變數，在同一容器內持續到冷啟動
+# TTL = 300s（5 分鐘），Stale-While-Revalidate 閾値 = 60s
+# ============================================================
+_MEMORY_CACHE: dict = {}
+_CACHE_TTL = 300        # 快取有效期（5 分鐘）
+_CACHE_STALE = 60       # 快取即將過期閾値，觸發背景刷新
+_CACHE_LOCK = threading.Lock()
+
+def _cache_get(key: str):
+    """取得快取，若未命中或已過期回傳 None"""
+    entry = _MEMORY_CACHE.get(key)
+    if entry and (time.time() - entry['ts']) < _CACHE_TTL:
+        return entry['data']
+    return None
+
+def _cache_set(key: str, data):
+    """寫入快取"""
+    with _CACHE_LOCK:
+        _MEMORY_CACHE[key] = {'data': data, 'ts': time.time()}
+
+def _cache_is_stale(key: str) -> bool:
+    """快取是否即將過期（剩餘時間 < _CACHE_STALE）"""
+    entry = _MEMORY_CACHE.get(key)
+    if not entry:
+        return False
+    age = time.time() - entry['ts']
+    return age > (_CACHE_TTL - _CACHE_STALE)
 
 class StockService:
     @staticmethod
@@ -29,6 +67,10 @@ class StockService:
             finally:
                 return_db_connection(conn)
         return 0
+
+    @staticmethod
+    def get_market_regime():
+        return _MARKET_REGIME.detect_regime()
 
     @staticmethod
     def get_leaderboard():
@@ -81,9 +123,36 @@ class StockService:
     @staticmethod
     def get_market_trending(market_param):
         market_param = market_param.upper()
+        cache_key = f"trending_{market_param}"
+
+        # ✅ 快取命中：直接回傳，< 1ms
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            # Stale-While-Revalidate：即將過期時在背景刷新
+            if _cache_is_stale(cache_key):
+                def _bg_refresh():
+                    try:
+                        fresh = StockService._fetch_trending_from_source(market_param)
+                        if fresh:
+                            _cache_set(cache_key, fresh)
+                            print(f"[Cache] Background refresh done for {cache_key}")
+                    except Exception as e:
+                        print(f"[Cache] Background refresh error: {e}")
+                threading.Thread(target=_bg_refresh, daemon=True).start()
+            return cached
+
+        # 快取未命中：同步取得資料並寫入快取
         is_tw = (market_param == 'TW')
-        
-        # 使用 tvscreener 動態篩選具備財經價值的熱門股
+        results = StockService._fetch_trending_from_source(market_param)
+        if results:
+            _cache_set(cache_key, results)
+        return results
+
+    @staticmethod
+    def _fetch_trending_from_source(market_param):
+        """從 tvscreener 取得 trending 資料（原有邏輯，抽出為獨立方法）"""
+        market_param = market_param.upper()
+        is_tw = (market_param == 'TW')
         results = []
         try:
             ss = StockScreener()
@@ -138,6 +207,63 @@ class StockService:
                         data = process_tvs_row(row_dict, symbol)
                         StockService._enrich_data(data)
                         StockService._save_to_cache(symbol, data)
+
+                        # ✅ AI 進化閃環：自動記錄預測快照
+                        # 使用 fScore + technicalRating 組合計算預測評分（0-10）
+                        try:
+                            from api.services.performance_tracker import PerformanceTracker
+                            
+                            # 1. 偵測市場狀態
+                            regime = _MARKET_REGIME.detect_regime()
+                            
+                            # 2. 讀取最新策略配置 (Mutable)
+                            config_path = Path(__file__).parent.parent / "strategy_config.json"
+                            strategy_params = {}
+                            if config_path.exists():
+                                try:
+                                    with open(config_path, "r", encoding="utf-8") as f:
+                                        full_config = json.load(f)
+                                        strategy_params = full_config.get("strategies", {}).get("growth_value", {})
+                                except Exception:
+                                    pass
+
+                            # 3. 根據配置調整評分或過濾 (範例：若 RSI > threshold 且 Bear Market，扣分)
+                            rsi_threshold = strategy_params.get("rsi_threshold", 70)
+                            rsi_val = float(data.get('RSI') or 50)
+                            
+                            f_score = float(data.get('fScore') or 0)
+                            tech_rating = float(data.get('technicalRating') or 0)
+                            current_price = float(data.get('price') or 0)
+                            
+                            # 預測評分：f_score 最大 9，tech_rating 約 -1~1，正規化到 0-10
+                            predicted_score = (f_score / 9) * 6 + ((tech_rating + 1) / 2) * 4
+                            
+                            # [Dynamic Adjustment] Bear Market penalty
+                            if regime == "bear" and rsi_val > rsi_threshold:
+                                predicted_score *= 0.8  # Penalty for high RSI in bear market
+                            
+                            PerformanceTracker.record_prediction(
+                                symbol=symbol,
+                                strategy_id="growth_value",
+                                predicted_score=round(predicted_score, 2),
+                                initial_price=current_price,
+                                details={
+                                    "regime": regime,
+                                    "rsi": rsi_val,
+                                    "rsi_limit": rsi_threshold
+                                }
+                            )
+                            
+                            # ✅ 順便檢查是否有待結算的舊預測 (Lazy Resolution)
+                            # 使用 threading 避免阻塞
+                            threading.Thread(
+                                target=PerformanceTracker.check_and_resolve_pending,
+                                args=(symbol, current_price)
+                            ).start()
+                            
+                        except Exception as e:
+                            print(f"[StockService] AI Loop Error: {e}")
+
                         return data
                     except Exception as e:
                         print(f"Error enriching {symbol}: {e}")
@@ -145,7 +271,9 @@ class StockService:
 
                 with ThreadPoolExecutor(max_workers=10) as executor:
                     futures = [executor.submit(enrich_and_cache, s, r) for s, r in stock_list]
-                    results = [f.result() for f in futures if f.result() is not None]
+                    # ✅ 修復：先呼叫 f.result() 一次儲存結果，再過濾 None（避免雙重呼叫）
+                    raw_results = [f.result() for f in futures]
+                    results = [r for r in raw_results if r is not None]
             
             # 備選方案：增加市場隔離過濾
             if not results:
@@ -293,6 +421,15 @@ class StockService:
             # We don't save history to cache to keep it small, but we could?
             # For now, let's just save metadata.
             StockService._save_to_cache(symbol, data)
+            
+            # ✅ AI 進化閃環：取得個股詳情時，順便檢查是否可結算預測
+            try:
+                from api.services.performance_tracker import PerformanceTracker
+                curr_p = float(data.get('price') or 0)
+                if curr_p > 0:
+                    PerformanceTracker.check_and_resolve_pending(symbol, curr_p)
+            except Exception as e:
+                print(f"[PerformanceTracker] check_and_resolve_pending error for {symbol}: {e}")
             
             # If we are flushing, we might want to return history too for the caller
             history = fetch_history_from_yfinance(symbol, period, interval)
