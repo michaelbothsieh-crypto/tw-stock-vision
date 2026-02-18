@@ -2,20 +2,36 @@ from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import json
 import re
+import threading
+from pathlib import Path
 
 # Modular Imports
 from api.db import get_db_connection, return_db_connection, init_db
 from api.constants import TW_STOCK_NAMES
 from api.services.stock_service import StockService
 
-# Initialize DB on load
-init_db()
+# Non-blocking DB Initialization
+threading.Thread(target=init_db, daemon=True).start()
 
 # Initialize Stock Names (Empty start, lazy load if needed)
 # Legacy code removed: No longer fetching full list on startup.
 # Usage updates handled by scripts/sync_names.py and DB.
 TW_STOCK_NAMES.update({}) 
 
+
+# ==============================================================================
+# Cold Start Optimization
+# ==============================================================================
+def pre_warm_cache():
+    try:
+        print("[ColdStart] Pre-warming cache for TW market...")
+        StockService.get_market_trending('TW')
+        print("[ColdStart] Cache warm-up complete.")
+    except Exception as e:
+        print(f"[ColdStart] Pre-warm failed: {e}")
+
+# Fire and forget on module load
+threading.Thread(target=pre_warm_cache, daemon=True).start()
 
 class handler(BaseHTTPRequestHandler):
     def _set_headers(self):

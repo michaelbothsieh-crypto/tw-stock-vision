@@ -82,7 +82,7 @@ export function DashboardClient({ initialData, initialMarket }: DashboardClientP
     const [selectedSymbol, setSelectedSymbol] = useState<string>(
         initialData.length > 0 ? initialData[0].symbol : ''
     )
-    const [loading, setLoading] = useState(false)
+    const [loading, setLoading] = useState(initialData.length === 0)
 
     // 市場切換時才發 client-side fetch（TW 首次載入已由 SSR 預取，無需等待）
     useEffect(() => {

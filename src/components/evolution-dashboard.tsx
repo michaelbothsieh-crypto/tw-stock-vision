@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Brain, Zap, History, ChevronRight, Activity, Target } from "lucide-react"
+import { Brain, Zap, History, ChevronRight, Activity, Target, HelpCircle, X } from "lucide-react"
 import { AI_RadarChart } from "./ui/radar-chart"
 import { cn } from "@/lib/utils"
 
@@ -46,6 +46,7 @@ interface EvolutionState {
 export function EvolutionDashboard() {
     const [state, setState] = useState<EvolutionState | null>(null)
     const [loading, setLoading] = useState(true)
+    const [showHelp, setShowHelp] = useState(false)
 
     useEffect(() => {
         const fetchState = async () => {
@@ -110,8 +111,122 @@ export function EvolutionDashboard() {
                         <div className="px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold flex items-center gap-1.5 animate-pulse">
                             <Zap className="h-3 w-3" /> LIVE
                         </div>
+                        <button
+                            onClick={() => setShowHelp(true)}
+                            className="p-1.5 rounded-full hover:bg-white/10 text-zinc-500 hover:text-white transition-colors"
+                            title="AI 運作說明"
+                        >
+                            <HelpCircle className="h-4 w-4" />
+                        </button>
                     </div>
                 </div>
+
+                <AnimatePresence>
+                    {showHelp && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+                            onClick={() => setShowHelp(false)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.95, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.95, opacity: 0 }}
+                                className="w-full max-w-2xl overflow-hidden rounded-xl border border-white/10 bg-zinc-900 shadow-2xl"
+                                onClick={e => e.stopPropagation()}
+                            >
+                                <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-6 py-4">
+                                    <h3 className="flex items-center gap-2 font-mono text-lg font-bold text-white">
+                                        <Brain className="h-5 w-5 text-emerald-500" />
+                                        AI 核心架構說明
+                                    </h3>
+                                    <button onClick={() => setShowHelp(false)} className="text-zinc-500 hover:text-white">
+                                        <X className="h-5 w-5" />
+                                    </button>
+                                </div>
+
+                                <div className="max-h-[70vh] overflow-y-auto p-6 space-y-8">
+                                    <section className="space-y-3">
+                                        <h4 className="flex items-center gap-2 text-sm font-bold text-emerald-400 uppercase tracking-wider">
+                                            <Activity className="h-4 w-4" /> 運作循環 (Evolution Loop)
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+                                            <div className="bg-zinc-950/50 p-3 rounded border border-white/5 space-y-1">
+                                                <div className="font-bold text-zinc-300">1. 觀察 (Observe)</div>
+                                                <div className="text-zinc-500">掃描全市場，收集技術指標 (RSI, MA) 與基本面數據 (F-Score)。</div>
+                                            </div>
+                                            <div className="bg-zinc-950/50 p-3 rounded border border-white/5 space-y-1">
+                                                <div className="font-bold text-zinc-300">2. 預測 (Predict)</div>
+                                                <div className="text-zinc-500">基於當前策略參數計算評分 (0-10)，高分者推薦。</div>
+                                            </div>
+                                            <div className="bg-zinc-950/50 p-3 rounded border border-white/5 space-y-1">
+                                                <div className="font-bold text-zinc-300">3. 追蹤 (Track)</div>
+                                                <div className="text-zinc-500">紀錄預測當下的價格，並持續追蹤後續 24 小時漲跌幅。</div>
+                                            </div>
+                                            <div className="bg-zinc-950/50 p-3 rounded border border-white/5 space-y-1">
+                                                <div className="font-bold text-zinc-300">4. 進化 (Mutate)</div>
+                                                <div className="text-zinc-500">若準確率低於 40%，自動觸發「反思引擎」調整策略參數。</div>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <section className="space-y-3">
+                                            <h4 className="flex items-center gap-2 text-sm font-bold text-emerald-400 uppercase tracking-wider">
+                                                <Activity className="h-4 w-4" /> 市場狀態 (Market Regime)
+                                            </h4>
+                                            <ul className="space-y-2 text-xs text-zinc-400">
+                                                <li className="flex gap-2">
+                                                    <span className="font-bold text-emerald-400 min-w-[3rem]">BULL</span>
+                                                    <span>牛市：大盤 200MA 之上。AI 策略偏向積極，容許較高 RSI。</span>
+                                                </li>
+                                                <li className="flex gap-2">
+                                                    <span className="font-bold text-rose-400 min-w-[3rem]">BEAR</span>
+                                                    <span>熊市：大盤 200MA 之下。AI 策略轉為防禦，嚴格過濾高風險股。</span>
+                                                </li>
+                                                <li className="flex gap-2">
+                                                    <span className="font-bold text-zinc-400 min-w-[3rem]">SIDE</span>
+                                                    <span>盤整：大盤無明顯趨勢。AI 側重區間操作與高防禦性標的。</span>
+                                                </li>
+                                            </ul>
+                                        </section>
+
+                                        <section className="space-y-3">
+                                            <h4 className="flex items-center gap-2 text-sm font-bold text-emerald-400 uppercase tracking-wider">
+                                                <Zap className="h-4 w-4" /> 關鍵參數 (Parameters)
+                                            </h4>
+                                            <ul className="space-y-2 text-xs text-zinc-400">
+                                                <li className="flex gap-2">
+                                                    <span className="font-bold text-zinc-300 min-w-[6rem]">RSI Threshold</span>
+                                                    <span>相對強弱指標上限。熊市時此數值會自動降低以減少追高風險。</span>
+                                                </li>
+                                                <li className="flex gap-2">
+                                                    <span className="font-bold text-zinc-300 min-w-[6rem]">F-Score Min</span>
+                                                    <span>Piotroski F-Score 財務評分下限 (0-9)。確保選股基本面體質。</span>
+                                                </li>
+                                                <li className="flex gap-2">
+                                                    <span className="font-bold text-zinc-300 min-w-[6rem]">Accuracy</span>
+                                                    <span>AI 預測準確率 (勝率)。綠燈 &gt; 60%，紅燈 &lt; 40%。</span>
+                                                </li>
+                                            </ul>
+                                        </section>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white/5 px-6 py-4 text-center">
+                                    <button
+                                        onClick={() => setShowHelp(false)}
+                                        className="w-full rounded bg-emerald-500 py-2 text-sm font-bold text-black hover:bg-emerald-400 transition-colors"
+                                    >
+                                        了解
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center relative z-10">
                     <div className="h-64">

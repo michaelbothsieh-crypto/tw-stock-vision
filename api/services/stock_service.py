@@ -269,29 +269,41 @@ class StockService:
                         print(f"Error enriching {symbol}: {e}")
                         return None
 
+                # [ 效能優化 ] 使用 ThreadPoolExecutor 並行處理指標補全與快取同步
+                # 限制最大資源消耗，避免冷啟動負載過高
                 with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = [executor.submit(enrich_and_cache, s, r) for s, r in stock_list]
-                    # ✅ 修復：先呼叫 f.result() 一次儲存結果，再過濾 None（避免雙重呼叫）
-                    raw_results = [f.result() for f in futures]
-                    results = [r for r in raw_results if r is not None]
+                    futures = {executor.submit(enrich_and_cache, s, r): s for s, r in stock_list}
+                    results = []
+                    # 使用 wait 或 result(timeout) 確保不因單一緩慢抓取而卡死整個 API
+                    for future in futures:
+                        try:
+                            res = future.result(timeout=15)
+                            if res: results.append(res)
+                        except Exception as e:
+                            print(f"[StockService] Timeout or error enrichment: {e}")
+                
+                # 再次排序並僅保留前 10
+                results.sort(key=lambda x: x.get('volume', 0), reverse=True)
+                return results[:10]
             
-            # 備選方案：增加市場隔離過濾
+            # 備選方案：當 API 抓取失敗時，從 DB 快取載入舊資料，確保啟動不報錯
             if not results:
                 conn = get_db_connection()
                 if conn:
-                    cur = conn.cursor()
-                    # 判斷市場規律：台股通常是純數字，美股是字母
-                    market_filter = "symbol ~ '^[0-9]+$'" if is_tw else "symbol ~ '^[A-Z]+$'"
-                    cur.execute(f"""
-                        SELECT data FROM stock_cache 
-                        WHERE {market_filter} 
-                        AND updated_at > NOW() - INTERVAL '24 hours'
-                        ORDER BY (data->>'fScore')::numeric DESC, (data->>'technicalRating')::numeric DESC
-                        LIMIT 15
-                    """)
-                    results = [r[0] for r in cur.fetchall()]
-                    cur.close()
-                    return_db_connection(conn)
+                    try:
+                        cur = conn.cursor()
+                        market_filter = "symbol ~ '^[0-9]+$'" if is_tw else "symbol ~ '^[A-Z]+$'"
+                        cur.execute(f"""
+                            SELECT data FROM stock_cache 
+                            WHERE {market_filter} 
+                            AND updated_at > NOW() - INTERVAL '24 hours'
+                            ORDER BY (data->>'fScore')::numeric DESC, (data->>'technicalRating')::numeric DESC
+                            LIMIT 15
+                        """)
+                        results = [r[0] for r in cur.fetchall()]
+                        cur.close()
+                    finally:
+                        return_db_connection(conn)
                     
         except Exception as e:
             print(f"Error in dynamic trending: {e}")
