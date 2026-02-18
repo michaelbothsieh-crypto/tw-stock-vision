@@ -44,12 +44,17 @@ def get_db_connection():
     with db_lock:
         if not db_pool:
             try:
+                # [Optimization] Re-check db_url here after lock acquisition
+                db_url = os.environ.get('DATABASE_URL')
+                if not db_url:
+                    return None
+                    
                 db_pool = pool.ThreadedConnectionPool(
                     1, 20,
                     db_url,
                     connect_timeout=10
                 )
-                print("Database connection pool created.")
+                print("Database connection pool created (Lazy).")
                 db_fail_count = 0
             except Exception as e:
                 db_fail_count += 1
