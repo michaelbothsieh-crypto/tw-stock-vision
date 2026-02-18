@@ -6,6 +6,8 @@ from tvscreener import StockScreener, StockField
 from api.db import get_db_connection, return_db_connection
 from api.constants import TW_STOCK_NAMES
 from api.scrapers import fetch_from_yfinance, fetch_history_from_yfinance, sanitize_json, get_field, process_tvs_row, trunc2, calculate_rsi
+from concurrent.futures import ThreadPoolExecutor
+import time
 
 class StockService:
     @staticmethod
@@ -119,23 +121,31 @@ class StockService:
                 mask = (to_num(filtered_df[v_col]) > min_vol) & (to_num(filtered_df[t_col]) > 0.2)
                 final_df = filtered_df[mask].sort_values(by=[v_col], ascending=False).head(15)
                 
+                # [ 效能優化 ] 使用 ThreadPoolExecutor 並行處理指標補全與快取同步
+                stock_list = []
                 for _, row_raw in final_df.iterrows():
                     row_dict = row_raw.to_dict()
                     symbol = row_dict.get('Name', '')
                     if not symbol: continue
                     
-                    # 再次驗證符號是否符合市場 (tvscreener 有時會混入其他交易所)
                     is_symbol_tw = bool(re.match(r'^[0-9]+$', symbol))
                     if is_tw and not is_symbol_tw: continue
                     if not is_tw and is_symbol_tw: continue
-                    
-                    # 標準化數據
-                    data = process_tvs_row(row_dict, symbol)
-                    StockService._enrich_data(data)
-                    
-                    # 自動同步至快取
-                    StockService._save_to_cache(symbol, data)
-                    results.append(data)
+                    stock_list.append((symbol, row_dict))
+
+                def enrich_and_cache(symbol, row_dict):
+                    try:
+                        data = process_tvs_row(row_dict, symbol)
+                        StockService._enrich_data(data)
+                        StockService._save_to_cache(symbol, data)
+                        return data
+                    except Exception as e:
+                        print(f"Error enriching {symbol}: {e}")
+                        return None
+
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    futures = [executor.submit(enrich_and_cache, s, r) for s, r in stock_list]
+                    results = [f.result() for f in futures if f.result() is not None]
             
             # 備選方案：增加市場隔離過濾
             if not results:

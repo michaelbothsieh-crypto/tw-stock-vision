@@ -114,7 +114,8 @@ def fetch_from_yfinance(symbol):
 
         ticker_symbol = yf_symbol
         ticker = yf.Ticker(yf_symbol)
-        info = ticker.info
+        # 設置超時限制，避免外部 API 阻塞主線程
+        info = ticker.get_info(proxy=None, timeout=10)
 
         # If initial fetch with yf_symbol (potentially .TW added) failed, and original symbol was a digit,
         # try the original .TW/.TWO fallback logic.
@@ -163,7 +164,7 @@ def fetch_from_yfinance(symbol):
                     continue
         else:
             t = yf.Ticker(ticker_symbol)
-            info = t.info
+            info = t.get_info(proxy=None, timeout=10)
 
         if not info or ('regularMarketPrice' not in info and 'currentPrice' not in info and 'longName' not in info):
             return None
