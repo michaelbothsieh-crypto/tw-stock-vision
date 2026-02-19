@@ -132,6 +132,15 @@ class handler(BaseHTTPRequestHandler):
                 conn.commit()
                 self.wfile.write(json.dumps({"status": "success"}).encode('utf-8'))
             
+            elif action == 'get_quote':
+                symbol = data.get('symbol')
+                from api.scrapers import fetch_realtime_quote
+                quote = fetch_realtime_quote(symbol)
+                if quote:
+                    self.wfile.write(json.dumps({"status": "success", "quote": quote}).encode('utf-8'))
+                else:
+                    self.wfile.write(json.dumps({"error": "Failed to fetch quote"}).encode('utf-8'))
+
             elif action == 'get_portfolio':
                 user_id = data.get('user_id')
                 # Use RealDictCursor to return objects

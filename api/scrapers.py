@@ -117,13 +117,14 @@ def fetch_from_yfinance(symbol):
         elif re.search(r'\.TW[O]?$', symbol, re.IGNORECASE):
             yf_symbol = symbol.upper()
 
-        ticker_symbol = yf_symbol
         ticker = yf.Ticker(yf_symbol)
-        # 設置超時限制，避免外部 API 阻塞主線程
-        info = ticker.get_info(proxy=None, timeout=10)
+        try:
+            info = ticker.info
+        except Exception:
+            info = None
 
-        # If initial fetch with yf_symbol (potentially .TW added) failed, and original symbol was a digit,
-        # try the original .TW/.TWO fallback logic.
+        # 如果 symbol 已經有 .TW/.TWO 則保留
+        # If info is empty/invalid, try fallback strategies
         if (not info or ('regularMarketPrice' not in info and 'currentPrice' not in info and 'longName' not in info)) and symbol.isdigit():
             # TW stocks - Try .TW first, then .TWO
             for suffix in [".TW", ".TWO"]:
@@ -133,44 +134,9 @@ def fetch_from_yfinance(symbol):
                     info = t.info
                     # Check if we got meaningful data
                     if info and ('regularMarketPrice' in info or 'currentPrice' in info or 'longName' in info):
-                        ticker_symbol = test_ticker
                         break
-                    else:
-                        # Backup: Try history if info is 404
-                        hist = t.history(period="1d")
-                        if not hist.empty:
-                            price = float(hist['Close'].iloc[-1])
-                            return {
-                                "symbol": symbol,
-                                "name": get_stock_name(symbol, f"台股 {symbol}"),
-                                "price": price,
-                                "change": 0,
-                                "changePercent": 0,
-                                "volume": 0,
-                                "marketCap": 0,
-                                "technicalRating": 0.5,
-                                "analystRating": 3,
-                                "targetPrice": price * 1.1,
-                                "sma50": price,
-                                "sma200": price,
-                                "sector": "-",
-                                "industry": "-",
-                                "exchange": suffix[1:],
-                                "fScore": 5,
-                                "zScore": 1.5,
-                                "grossMargin": 0,
-                                "netMargin": 0,
-                                "operatingMargin": 0,
-                                "eps": 0,
-                                "grahamNumber": price * 0.9,
-                                "source": "yf-hist"
-                            }
-                except Exception as e:
-                    print(f"[scrapers] Fuzzy search error for {symbol}: {e}")
+                except:
                     continue
-        else:
-            t = yf.Ticker(ticker_symbol)
-            info = t.get_info(proxy=None, timeout=10)
 
         if not info or ('regularMarketPrice' not in info and 'currentPrice' not in info and 'longName' not in info):
             return None
@@ -191,7 +157,7 @@ def fetch_from_yfinance(symbol):
         roe = (info.get('returnOnEquity', 0) or 0) * 100
         roa = (info.get('returnOnAssets', 0) or 0) * 100
         rev_growth = (info.get('revenueGrowth', 0) or 0) * 100
-        debt_ratio = (info.get('debtToEquity', 0) or 0) # yf 的 debtToEquity 通常已經是 100 基準，如 18.18
+        debt_ratio = (info.get('debtToEquity', 0) or 0) # yf 的 debtToEquity 通常已經是 100 基準
         
         # 市值處理
         raw_mcap = info.get('marketCap', 0)
@@ -246,6 +212,7 @@ def fetch_from_yfinance(symbol):
     except Exception as e:
         print(f"yfinance error: {e}")
         return None
+
 
 def fetch_history_from_yfinance(symbol, period="1y", interval="1d", max_points=365):
     """Fetch OHLCV history for charting from yfinance."""
@@ -444,3 +411,42 @@ def process_tvs_row(row, symbol):
         data["grahamNumber"] = get_field(row, ["Graham's Number (TTM)", "Graham's Number (FY)", "Graham's Number"], 0)
         
     return data
+
+def fetch_realtime_quote(symbol):
+    """
+    極速抓取即時報價 (Last Price, Change, Pct)
+    使用 yfinance fast_info (不抓取完整 info，只抓必要的)
+    """
+    import yfinance as yf
+    import time
+    try:
+        # Handle TW suffixes if needed (similar logic to fetch_from_yfinance)
+        yf_symbol = symbol
+        if re.match(r'^\d{4,6}$', symbol):
+            yf_symbol = f"{symbol}.TW"
+        
+        ticker = yf.Ticker(yf_symbol)
+        # fast_info is efficient
+        fi = ticker.fast_info
+        
+        price = fi.last_price
+        prev_close = fi.previous_close
+        
+        # Calculate change
+        if price and prev_close:
+            change = price - prev_close
+            change_p = (change / prev_close) * 100
+        else:
+            change = 0
+            change_p = 0
+            
+        return {
+            "symbol": symbol,
+            "price": price,
+            "change": change,
+            "changePercent": change_p,
+            "time": time.time()
+        }
+    except Exception as e:
+        # Silently fail or return None for polling
+        return None

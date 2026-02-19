@@ -238,6 +238,42 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
         return () => { isCancelled = true; };
     }, [currentSymbol, periodKey, retryKey]);
 
+    // [New] Real-time Polling (Every 5s)
+    useEffect(() => {
+        if (!currentSymbol || market !== 'TW') return; // Only poll TW for now, or if market is open
+        // check market status? simpler to just poll if valid symbol
+
+        const poll = async () => {
+            try {
+                const res = await fetch(`/api/stock?action=get_quote&symbol=${currentSymbol}`);
+                if (!res.ok) return;
+                const json = await res.json();
+                if (json.status === 'success' && json.quote) {
+                    const q = json.quote;
+                    setDetailBySymbol((prev) => {
+                        const current = prev[currentSymbol] || {};
+                        // Only update if price changed to avoid render thrashing?
+                        // React state updates cause re-render anyway.
+                        return {
+                            ...prev,
+                            [currentSymbol]: {
+                                ...current,
+                                price: q.price,
+                                change: q.change,
+                                changePercent: q.changePercent,
+                            }
+                        };
+                    });
+                }
+            } catch (e) {
+                // silent fail for polling
+            }
+        };
+
+        const intervalId = setInterval(poll, 5000); // 5 seconds
+        return () => clearInterval(intervalId);
+    }, [currentSymbol, market]);
+
     // Skeleton Loading State
     if (!selectedStock) {
         return (
