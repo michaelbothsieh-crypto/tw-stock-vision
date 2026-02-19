@@ -252,65 +252,23 @@ class StockService:
                 except Exception:
                     pass
 
-                def enrich_and_cache(symbol, row_dict):
+                # [Optimization] 列表頁移除 yfinance fallback，只用 TVScreener 資料
+                # 避免 Vercel Timeout (10s limit)
+                def enrich_fast(symbol, row_dict):
                     try:
                         data = process_tvs_row(row_dict, symbol)
                         StockService._enrich_data(data)
                         StockService._save_to_cache(symbol, data)
-
-                        # ✅ AI 進化閃環：自動記錄預測快照
-                        try:
-                            from api.services.performance_tracker import PerformanceTracker
-
-                            rsi_threshold = strategy_params.get("rsi_threshold", 70)
-                            rsi_val = float(data.get('RSI') or 50)
-                            
-                            f_score = float(data.get('fScore') or 0)
-                            tech_rating = float(data.get('technicalRating') or 0)
-                            current_price = float(data.get('price') or 0)
-                            
-                            predicted_score = (f_score / 9) * 6 + ((tech_rating + 1) / 2) * 4
-                            
-                            if regime == "bear" and rsi_val > rsi_threshold:
-                                predicted_score *= 0.8
-                            
-                            PerformanceTracker.record_prediction(
-                                symbol=symbol,
-                                strategy_id="growth_value",
-                                predicted_score=round(predicted_score, 2),
-                                initial_price=current_price,
-                                details={
-                                    "regime": regime,
-                                    "rsi": rsi_val,
-                                    "rsi_limit": rsi_threshold
-                                }
-                            )
-                            
-                            threading.Thread(
-                                target=PerformanceTracker.check_and_resolve_pending,
-                                args=(symbol, current_price)
-                            ).start()
-                            
-                        except Exception as e:
-                            print(f"[StockService] AI Loop Error: {e}")
-
                         return data
                     except Exception as e:
                         print(f"Error enriching {symbol}: {e}")
                         return None
 
-                # [ 效能優化 ] 使用 ThreadPoolExecutor 並行處理指標補全與快取同步
-                # 限制最大資源消耗，避免冷啟動負載過高
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = {executor.submit(enrich_and_cache, s, r): s for s, r in stock_list}
-                    results = []
-                    # 使用 wait 或 result(timeout) 確保不因單一緩慢抓取而卡死整個 API
-                    for future in futures:
-                        try:
-                            res = future.result(timeout=15)
-                            if res: results.append(res)
-                        except Exception as e:
-                            print(f"[StockService] Timeout or error enrichment: {e}")
+                # [Performance] 直接處理，不再使用 ThreadPool 等待 I/O
+                # 因為移除了 I/O (yfinance)，這些都是純記憶體操作，速度極快
+                for s, r in stock_list:
+                    res = enrich_fast(s, r)
+                    if res: results.append(res)
                 
                 # 再次排序並僅保留前 10
                 results.sort(key=lambda x: x.get('volume', 0), reverse=True)

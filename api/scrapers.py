@@ -266,7 +266,9 @@ def fetch_history_from_yfinance(symbol, period="1y", interval="1d", max_points=3
         for attempt in range(2):  # 最多重試 2 次
             try:
                 ticker = yf.Ticker(ticker_symbol)
-                hist = ticker.history(period=period, interval=interval, auto_adjust=True, timeout=8)
+                # [Optimization] Timeout 降至 6s，保留 4s 給 Python 處理與 Response overhead
+                # Vercel Hobby Plan 限制 10s，超過會直接 504
+                hist = ticker.history(period=period, interval=interval, auto_adjust=True, timeout=6)
 
                 if hist is None or hist.empty:
                     break  # 此 candidate 無資料，跳到下一個 candidate
