@@ -142,6 +142,7 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
     const [detailBySymbol, setDetailBySymbol] = useState<Record<string, Partial<StockData>>>({});
     const [periodKey, setPeriodKey] = useState<PeriodKey>('1Y');
     const [searchTerm, setSearchTerm] = useState('');
+    const [retryKey, setRetryKey] = useState(0);
 
     const handleSearch = (term: string) => {
         if (!term) return;
@@ -235,7 +236,7 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
         fetchData();
 
         return () => { isCancelled = true; };
-    }, [currentSymbol, periodKey]);
+    }, [currentSymbol, periodKey, retryKey]);
 
     if (!selectedStock) {
         return <div className="flex h-screen items-center justify-center font-mono text-zinc-500">系統初始化中 (INITIALIZING)...</div>;
@@ -270,10 +271,10 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
             </div>
 
             <div className="flex flex-1 flex-col pb-16 lg:grid lg:grid-cols-12 lg:pb-0">
-                {/* Mobile Order: 1. Chart, 2. Metrics, 3. List */}
+                {/* Mobile: Metrics first (price info), then Chart. Desktop: Chart center */}
 
-                {/* 1. Chart Area (Mobile First Order) */}
-                <div className="relative order-1 flex min-h-[400px] flex-col items-center justify-center border-b border-white/10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-900/50 to-black lg:order-2 lg:col-span-5 lg:min-h-[600px] lg:border-b-0 lg:border-r">
+                {/* 1. Chart Area */}
+                <div className="relative order-2 flex min-h-[280px] flex-col items-center justify-center border-b border-white/10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-900/50 to-black lg:order-2 lg:col-span-5 lg:min-h-[600px] lg:border-b-0 lg:border-r">
                     <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px]" />
 
                     <div className="relative z-10 h-full w-full p-4">
@@ -282,8 +283,12 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
                                 <span className="animate-pulse font-mono text-xs text-emerald-500">載入歷史數據中 (FETCHING)...</span>
                             </div>
                         ) : (
-                            <div className="h-[300px] w-full lg:h-[500px]" style={{ touchAction: 'pan-y' }}>
-                                <StockChart data={chartData} color={activeStock.changePercent >= 0 ? '#10b981' : '#f43f5e'} />
+                            <div className="h-[220px] w-full lg:h-[500px]" style={{ touchAction: 'pan-y' }}>
+                                <StockChart
+                                    data={chartData}
+                                    color={activeStock.changePercent >= 0 ? '#10b981' : '#f43f5e'}
+                                    onRetry={() => setRetryKey((k) => k + 1)}
+                                />
                             </div>
                         )}
 
@@ -306,16 +311,13 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
                     </div>
                 </div>
 
-                {/* 2. Focus Metrics */}
-                <div className="order-2 border-b border-white/10 bg-zinc-950/30 lg:order-1 lg:col-span-4 lg:border-b-0 lg:border-r">
+                {/* 2. Focus Metrics (Mobile: First — shows price/symbol) */}
+                <div className="order-1 border-b border-white/10 bg-zinc-950/30 lg:order-1 lg:col-span-4 lg:border-b-0 lg:border-r">
                     <FocusMetrics stock={activeStock} detailedName={detailedName} chartData={chartData} />
                 </div>
 
                 {/* 3. Market Overview */}
-                <div className="order-3 min-h-[400px] bg-zinc-950/50 lg:order-3 lg:col-span-3">
-                    <div className="lg:hidden p-4 text-center text-xs text-zinc-500">
-                        ↓ 下方為市場總覽列表 ↓
-                    </div>
+                <div className="order-3 max-h-[50vh] overflow-y-auto bg-zinc-950/50 lg:order-3 lg:col-span-3 lg:max-h-none lg:min-h-[400px] lg:overflow-visible">
                     <MarketOverview
                         data={enrichedData}
                         onSelect={onSelect}
@@ -327,7 +329,7 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
                 </div>
             </div>
 
-            <div className="order-4 col-span-12 p-4 lg:p-6 bg-zinc-950/20 border-t border-white/5">
+            <div className="order-4 col-span-12 p-3 lg:p-6 bg-zinc-950/20 border-t border-white/5">
                 <EvolutionDashboard />
             </div>
 

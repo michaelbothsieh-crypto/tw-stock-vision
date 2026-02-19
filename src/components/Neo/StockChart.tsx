@@ -25,6 +25,7 @@ interface ChartData {
 interface StockChartProps {
     data: ChartData[];
     color?: string;
+    onRetry?: () => void;
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -67,7 +68,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     return null;
 };
 
-export const StockChart = ({ data, color = "#10b981" }: StockChartProps) => {
+export const StockChart = ({ data, color = "#10b981", onRetry }: StockChartProps) => {
     // 計算 RSI (14)
     const chartData = useMemo(() => {
         if (!data || data.length < 2) return data;
@@ -109,8 +110,16 @@ export const StockChart = ({ data, color = "#10b981" }: StockChartProps) => {
 
     if (!chartData || chartData.length === 0) {
         return (
-            <div className="flex h-full w-full items-center justify-center">
-                <p className="font-mono text-xs text-zinc-600">暫無歷史數據 (NO DATA)</p>
+            <div className="flex h-full w-full flex-col items-center justify-center gap-3">
+                <p className="font-mono text-xs text-zinc-500">暫無歷史數據</p>
+                {onRetry && (
+                    <button
+                        onClick={onRetry}
+                        className="rounded border border-emerald-500/30 bg-emerald-500/10 px-4 py-1.5 font-mono text-xs text-emerald-400 transition-colors hover:bg-emerald-500/20"
+                    >
+                        重新載入
+                    </button>
+                )}
             </div>
         );
     }

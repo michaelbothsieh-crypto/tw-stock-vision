@@ -29,19 +29,11 @@
 - **記憶層**: Evolution State Manager (Persistent AI Learning)
 - **資料來源**: TradingView GSG, yfinance, TWSE ISIN Data
 
-## 🚀 快速啟動
+## 🌐 線上版
 
-```bash
-# 1. 安裝環境
-npm install
-pip install -r requirements.txt
+👉 **[tw-stock-vision.vercel.app](https://tw-stock-vision.vercel.app)**
 
-# 2. 啟動選股引擎與 API
-python run_local_api.py
-
-# 3. 開啟前端介面
-npm run dev
-```
+> 已部署於 Vercel，開啟即可使用，無需安裝。
 
 ## �️ 如何使用
 

@@ -263,76 +263,73 @@ def fetch_history_from_yfinance(symbol, period="1y", interval="1d", max_points=3
         candidates = [normalized]
 
     for ticker_symbol in candidates:
-        try:
-            # print(f"DEBUG: Fetching history for {ticker_symbol}...")
-            ticker = yf.Ticker(ticker_symbol)
-            # [ 性能優化 ] 設置超時限制或重試限制
-            # yfinance 內部可能阻塞，我們確保僅獲取必要的數據點
-            hist = ticker.history(period=period, interval=interval, auto_adjust=True, timeout=5)
-            
-            if hist is None or hist.empty:
-                continue
+        for attempt in range(2):  # 最多重試 2 次
+            try:
+                ticker = yf.Ticker(ticker_symbol)
+                hist = ticker.history(period=period, interval=interval, auto_adjust=True, timeout=8)
 
-            hist = hist.reset_index()
-            # Handle different index names (Date vs Datetime)
-            time_col = None
-            for col in ["Date", "Datetime"]:
-                if col in hist.columns:
-                    time_col = col
+                if hist is None or hist.empty:
+                    break  # 此 candidate 無資料，跳到下一個 candidate
+
+                hist = hist.reset_index()
+                # Handle different index names (Date vs Datetime)
+                time_col = None
+                for col in ["Date", "Datetime"]:
+                    if col in hist.columns:
+                        time_col = col
+                        break
+
+                if not time_col:
                     break
-            
-            if not time_col:
-                continue
 
-            # Convert to list of dicts
-            output = []
-            # Take only needed columns
-            needed_cols = ["Open", "High", "Low", "Close", "Volume"]
-            
-            # Ensure columns exist
-            if not all(col in hist.columns for col in needed_cols):
-                 continue
+                # Convert to list of dicts
+                output = []
+                needed_cols = ["Open", "High", "Low", "Close", "Volume"]
 
-            rows = hist.tail(max_points).to_dict(orient="records")
-            is_intraday = interval in ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"]
-            
-            for r in rows:
-                try:
-                    ts = r[time_col]
-                    if is_intraday:
-                        if hasattr(ts, "strftime"):
-                            # 分時數據顯示時間即可
-                            date_str = ts.strftime("%H:%M")
-                        else:
-                            # Fallback: manually stringify and extract time if strftime missing
-                            s = str(ts)
-                            # Expecting "YYYY-MM-DD HH:MM:SS"
-                            if ' ' in s:
-                                date_str = s.split(' ')[1][:5]
+                if not all(col in hist.columns for col in needed_cols):
+                    break
+
+                rows = hist.tail(max_points).to_dict(orient="records")
+                is_intraday = interval in ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"]
+
+                for r in rows:
+                    try:
+                        ts = r[time_col]
+                        if is_intraday:
+                            if hasattr(ts, "strftime"):
+                                date_str = ts.strftime("%H:%M")
                             else:
-                                date_str = s
-                    else:
-                        date_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts).split(' ')[0]
-                    
-                    record = {
-                        "Date": date_str,
-                        "Open": float(r["Open"] or 0),
-                        "High": float(r["High"] or 0),
-                        "Low": float(r["Low"] or 0),
-                        "Close": float(r["Close"] or 0),
-                        "Volume": float(r["Volume"] or 0)
-                    }
-                    
-                    if record["Close"] > 0:
-                        output.append(record)
-                except Exception:
-                    continue
+                                s = str(ts)
+                                if ' ' in s:
+                                    date_str = s.split(' ')[1][:5]
+                                else:
+                                    date_str = s
+                        else:
+                            date_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts).split(' ')[0]
 
-            if output:
-                return output
-                
-        except Exception:
-            continue
+                        record = {
+                            "Date": date_str,
+                            "Open": float(r["Open"] or 0),
+                            "High": float(r["High"] or 0),
+                            "Low": float(r["Low"] or 0),
+                            "Close": float(r["Close"] or 0),
+                            "Volume": float(r["Volume"] or 0)
+                        }
+
+                        if record["Close"] > 0:
+                            output.append(record)
+                    except Exception:
+                        continue
+
+                if output:
+                    return output
+                break  # 有 hist 但 output 為空，跳到下一個 candidate
+
+            except Exception:
+                import time
+                if attempt < 1:
+                    time.sleep(0.5)  # 重試前短暫等待
+                continue
 
     return []
 

@@ -74,8 +74,8 @@ export const MarketOverview = ({
                 </div>
             </div>
 
-            {/* 說明區塊 */}
-            <div className="border-b border-white/5 bg-emerald-500/5 p-3 font-sans text-[11px] leading-relaxed text-zinc-400">
+            {/* 說明區塊 (Desktop Only) */}
+            <div className="hidden border-b border-white/5 bg-emerald-500/5 p-3 font-sans text-[11px] leading-relaxed text-zinc-400 lg:block">
                 <div className="mb-1 flex items-center gap-1.5 font-bold text-emerald-500/80">
                     <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
                     {market === 'TW' ? '台股' : '美股'}市場資料指南

@@ -52,12 +52,12 @@ export const FocusMetrics = ({ stock, detailedName, chartData }: { stock: StockD
     }, [stock]);
 
     return (
-        <div className="flex flex-col p-6 font-mono custom-scrollbar lg:h-full lg:overflow-y-auto">
+        <div className="flex flex-col p-4 lg:p-6 font-mono custom-scrollbar lg:h-full lg:overflow-y-auto">
             <div className="mb-6 flex items-start justify-between">
                 <div className="flex-1">
-                    <Badge variant="outline" className="mb-2 border-emerald-500/30 bg-emerald-500/10 text-emerald-500">即時 (LIVE)</Badge>
+                    <Badge variant="outline" className="mb-1 lg:mb-2 border-emerald-500/30 bg-emerald-500/10 text-emerald-500">即時 (LIVE)</Badge>
                     <div className="flex items-center gap-3">
-                        <h1 className="text-4xl font-bold tracking-tight text-white">{stock.symbol}</h1>
+                        <h1 className="text-3xl lg:text-4xl font-bold tracking-tight text-white">{stock.symbol}</h1>
                         <AnimatePresence>
                             {latestRSI > 70 && (
                                 <motion.span
@@ -89,7 +89,7 @@ export const FocusMetrics = ({ stock, detailedName, chartData }: { stock: StockD
 
                 <MomentumBar rsi={latestRSI} />
 
-                <div className="mt-4 flex flex-col items-center border-y border-white/5 bg-black/40 py-2">
+                <div className="mt-4 hidden flex-col items-center border-y border-white/5 bg-black/40 py-2 lg:flex">
                     <div className="mb-0 w-full text-[10px] font-bold tracking-widest text-emerald-500/90 text-center">五維基本面戰力 (POWER)</div>
                     <NeoRadar data={radarData} />
                 </div>
@@ -99,14 +99,14 @@ export const FocusMetrics = ({ stock, detailedName, chartData }: { stock: StockD
                     {metric('產業版塊', stock.sector || '--')}
                 </div>
 
-                <div className="mt-6">
+                <div className="mt-6 hidden lg:block">
                     <div className="mb-4 w-full text-[10px] font-bold tracking-wider text-emerald-500/90">獲利與估值對比 (VALUATION)</div>
                     <BulletMetric label="殖利率 (Yield)" value={stock.yield || 0} target={4.5} unit="%" />
                     <BulletMetric label="獲利能力 (ROE)" value={stock.roe || 0} target={12} unit="%" />
                     <BulletMetric label="營收年增 (RevG)" value={stock.revGrowth || 0} target={15} unit="%" />
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-3 opacity-60">
+                <div className="mt-4 hidden grid-cols-2 gap-3 opacity-60 lg:grid">
                     {metric('本益比 (P/E)', fmtNum(stock.peRatio))}
                     {metric('淨值比 (P/B)', fmtNum(stock.pbRatio))}
                 </div>
