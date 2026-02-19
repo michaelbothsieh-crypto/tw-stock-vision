@@ -14,6 +14,7 @@ PerformanceTracker — AI 自我進化閉環的「觀察層」
 
 import json
 import time
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from api.db import get_db_connection, return_db_connection
@@ -28,32 +29,66 @@ EVOLUTION_TRIGGERS = {
 # 持久化路徑（Serverless 友好：使用 /tmp）
 _TRACKER_FILE = Path("/tmp/performance_tracker.json")
 
+# [Optimization] In-memory buffer to reduce disk I/O
+_MEMORY_BUFFER = None
+_BUFFER_DIRTY = False
+_BUFFER_LOCK = threading.Lock()
+_LAST_FLUSH_TIME = 0
+_FLUSH_INTERVAL = 60  # flush to disk at most every 60 seconds
+
 
 class PerformanceTracker:
     """
     AI 進化閉環的觀察層。
     追蹤預測 → 實際表現，提供準確率數據給 ReflectionEngine。
+    [Optimized] Uses in-memory buffer; flushes to disk periodically.
     """
 
     @staticmethod
     def _load() -> dict:
-        """載入追蹤記錄（優先從 /tmp，Vercel 環境可用）"""
-        try:
-            if _TRACKER_FILE.exists():
-                return json.loads(_TRACKER_FILE.read_text(encoding='utf-8'))
-        except Exception as e:
-            print(f"[PerformanceTracker] Load error: {e}")
-        return {"predictions": [], "actuals": []}
+        """從記憶體暫存載入；僅在首次或暫存為空時讀磁碟"""
+        global _MEMORY_BUFFER
+        if _MEMORY_BUFFER is not None:
+            return _MEMORY_BUFFER
+        with _BUFFER_LOCK:
+            if _MEMORY_BUFFER is not None:
+                return _MEMORY_BUFFER
+            try:
+                if _TRACKER_FILE.exists():
+                    _MEMORY_BUFFER = json.loads(_TRACKER_FILE.read_text(encoding='utf-8'))
+                else:
+                    _MEMORY_BUFFER = {"predictions": [], "actuals": []}
+            except Exception as e:
+                print(f"[PerformanceTracker] Load error: {e}")
+                _MEMORY_BUFFER = {"predictions": [], "actuals": []}
+        return _MEMORY_BUFFER
 
     @staticmethod
     def _save(data: dict):
-        """儲存追蹤記錄"""
-        try:
-            _TRACKER_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
-        except Exception as e:
-            print(f"[PerformanceTracker] Save error: {e}")
+        """標記為 dirty；僅在超過 flush interval 時才寫磁碟"""
+        global _MEMORY_BUFFER, _BUFFER_DIRTY, _LAST_FLUSH_TIME
+        _MEMORY_BUFFER = data
+        _BUFFER_DIRTY = True
+        now = time.time()
+        if now - _LAST_FLUSH_TIME >= _FLUSH_INTERVAL:
+            PerformanceTracker._flush()
 
     @staticmethod
+    def _flush():
+        """Force flush to disk."""
+        global _BUFFER_DIRTY, _LAST_FLUSH_TIME
+        with _BUFFER_LOCK:
+            if _MEMORY_BUFFER is not None and _BUFFER_DIRTY:
+                try:
+                    _TRACKER_FILE.write_text(
+                        json.dumps(_MEMORY_BUFFER, ensure_ascii=False, indent=2),
+                        encoding='utf-8'
+                    )
+                    _BUFFER_DIRTY = False
+                    _LAST_FLUSH_TIME = time.time()
+                except Exception as e:
+                    print(f"[PerformanceTracker] Flush error: {e}")
+
     @staticmethod
     def record_prediction(symbol: str, strategy_id: str, predicted_score: float, initial_price: float, details: dict = None):
         """

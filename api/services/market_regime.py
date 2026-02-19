@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
-import yfinance as yf
-import numpy as np
+
+# [Optimization] yfinance and numpy are lazy-loaded in detect_regime()
 
 class MarketRegimeDetector:
     def __init__(self, index_symbol="^TWII"):
@@ -22,6 +22,7 @@ class MarketRegimeDetector:
             return self.current_regime
 
         try:
+            import yfinance as yf
             # Fetch history
             ticker = yf.Ticker(self.index_symbol)
             # Fetch slightly more than lookback to ensure we have endpoints

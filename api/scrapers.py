@@ -1,15 +1,16 @@
 import math
-import tvscreener as tvs
-from tvscreener import StockScreener, StockField
-import yfinance as yf
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+import os
 import re
 from api.constants import TW_STOCK_NAMES, SECTOR_TRANSLATIONS, EXCHANGE_TRANSLATIONS
 from api.db import get_db_connection, return_db_connection
 
+# [Optimization] Heavy imports (tvscreener, yfinance, requests) are lazy-loaded
+# inside functions to eliminate cold-start overhead.
+
 def get_session():
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
     session = requests.Session()
     retry = Retry(connect=3, backoff_factor=0.5)
     adapter = HTTPAdapter(max_retries=retry)
@@ -105,6 +106,7 @@ def format_market_cap(val, is_tw=True):
         return str(val)
 
 def fetch_from_yfinance(symbol):
+    import yfinance as yf
     try:
         # 強制台股代號 (4位數字) 加上 .TW 後綴，確保抓取精確度
         yf_symbol = symbol
@@ -247,6 +249,7 @@ def fetch_from_yfinance(symbol):
 
 def fetch_history_from_yfinance(symbol, period="1y", interval="1d", max_points=365):
     """Fetch OHLCV history for charting from yfinance."""
+    import yfinance as yf
     normalized = symbol.strip().upper()
     candidates = []
 
@@ -363,6 +366,7 @@ def calculate_rsi(history, period=14):
 
 def process_tvs_row(row, symbol):
     """將 tvscreener 的 row 轉換為標準化的資料格式"""
+    from tvscreener import StockField
     price = get_field(row, ['Price'], 0)
     eps = get_field(row, ['Basic EPS (TTM)', 'EPS Diluted (TTM)'], 0)
     

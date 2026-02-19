@@ -3,18 +3,26 @@ import json
 import math
 import time
 import threading
-import tvscreener as tvs
-from tvscreener import StockScreener, StockField
 from api.db import get_db_connection, return_db_connection
 from api.constants import TW_STOCK_NAMES
 from api.scrapers import fetch_from_yfinance, fetch_history_from_yfinance, sanitize_json, get_field, process_tvs_row, trunc2, calculate_rsi
-from api.scrapers import fetch_from_yfinance, fetch_history_from_yfinance, sanitize_json, get_field, process_tvs_row, trunc2, calculate_rsi
 from concurrent.futures import ThreadPoolExecutor
-from api.services.market_regime import MarketRegimeDetector
 from pathlib import Path
 
-# Initialize Regime Detector (Singleton-like)
-_MARKET_REGIME = MarketRegimeDetector()
+# [Optimization] Heavy imports (tvscreener) are lazy-loaded inside methods.
+# MarketRegimeDetector is lazy-initialized on first use.
+_MARKET_REGIME = None
+_MARKET_REGIME_LOCK = threading.Lock()
+
+def _get_market_regime():
+    """Lazy singleton for MarketRegimeDetector."""
+    global _MARKET_REGIME
+    if _MARKET_REGIME is None:
+        with _MARKET_REGIME_LOCK:
+            if _MARKET_REGIME is None:
+                from api.services.market_regime import MarketRegimeDetector
+                _MARKET_REGIME = MarketRegimeDetector()
+    return _MARKET_REGIME
 
 
 # ============================================================
@@ -70,7 +78,7 @@ class StockService:
 
     @staticmethod
     def get_market_regime():
-        return _MARKET_REGIME.detect_regime()
+        return _get_market_regime().detect_regime()
 
     @staticmethod
     def get_leaderboard():
@@ -202,6 +210,22 @@ class StockService:
                     if not is_tw and is_symbol_tw: continue
                     stock_list.append((symbol, row_dict))
 
+                # [Optimization] Pre-compute shared values ONCE, outside per-stock loop
+                try:
+                    regime = _get_market_regime().detect_regime()
+                except Exception:
+                    regime = "sideways"
+
+                strategy_params = {}
+                try:
+                    config_path = Path(__file__).parent.parent / "strategy_config.json"
+                    if config_path.exists():
+                        with open(config_path, "r", encoding="utf-8") as f:
+                            full_config = json.load(f)
+                            strategy_params = full_config.get("strategies", {}).get("growth_value", {})
+                except Exception:
+                    pass
+
                 def enrich_and_cache(symbol, row_dict):
                     try:
                         data = process_tvs_row(row_dict, symbol)
@@ -209,25 +233,9 @@ class StockService:
                         StockService._save_to_cache(symbol, data)
 
                         # ✅ AI 進化閃環：自動記錄預測快照
-                        # 使用 fScore + technicalRating 組合計算預測評分（0-10）
                         try:
                             from api.services.performance_tracker import PerformanceTracker
-                            
-                            # 1. 偵測市場狀態
-                            regime = _MARKET_REGIME.detect_regime()
-                            
-                            # 2. 讀取最新策略配置 (Mutable)
-                            config_path = Path(__file__).parent.parent / "strategy_config.json"
-                            strategy_params = {}
-                            if config_path.exists():
-                                try:
-                                    with open(config_path, "r", encoding="utf-8") as f:
-                                        full_config = json.load(f)
-                                        strategy_params = full_config.get("strategies", {}).get("growth_value", {})
-                                except Exception:
-                                    pass
 
-                            # 3. 根據配置調整評分或過濾 (範例：若 RSI > threshold 且 Bear Market，扣分)
                             rsi_threshold = strategy_params.get("rsi_threshold", 70)
                             rsi_val = float(data.get('RSI') or 50)
                             
@@ -235,12 +243,10 @@ class StockService:
                             tech_rating = float(data.get('technicalRating') or 0)
                             current_price = float(data.get('price') or 0)
                             
-                            # 預測評分：f_score 最大 9，tech_rating 約 -1~1，正規化到 0-10
                             predicted_score = (f_score / 9) * 6 + ((tech_rating + 1) / 2) * 4
                             
-                            # [Dynamic Adjustment] Bear Market penalty
                             if regime == "bear" and rsi_val > rsi_threshold:
-                                predicted_score *= 0.8  # Penalty for high RSI in bear market
+                                predicted_score *= 0.8
                             
                             PerformanceTracker.record_prediction(
                                 symbol=symbol,
@@ -254,8 +260,6 @@ class StockService:
                                 }
                             )
                             
-                            # ✅ 順便檢查是否有待結算的舊預測 (Lazy Resolution)
-                            # 使用 threading 避免阻塞
                             threading.Thread(
                                 target=PerformanceTracker.check_and_resolve_pending,
                                 args=(symbol, current_price)
@@ -337,23 +341,34 @@ class StockService:
 
             # Normal Read -> DB Cache Only
             cur = conn.cursor()
-            cur.execute("SELECT data FROM stock_cache WHERE symbol = %s", (symbol,))
+            cur.execute("SELECT data, updated_at FROM stock_cache WHERE symbol = %s", (symbol,))
             row = cur.fetchone()
             cur.close()
             
             if row:
                 cached_data = dict(row[0]) if isinstance(row[0], dict) else {}
+                cache_updated_at = row[1] if len(row) > 1 else None
                 
-                # [ 性能優化 ] 如果快取中已經有歷史數據，直接返回
-                if cached_data.get("history"):
+                # [Fix] History TTL: re-fetch if older than 24 hours
+                from datetime import datetime, timezone
+                history_stale = True
+                if cache_updated_at:
+                    try:
+                        if cache_updated_at.tzinfo is None:
+                            cache_updated_at = cache_updated_at.replace(tzinfo=timezone.utc)
+                        age_hours = (datetime.now(timezone.utc) - cache_updated_at).total_seconds() / 3600
+                        history_stale = (age_hours > 24)
+                    except Exception:
+                        history_stale = True
+
+                if cached_data.get("history") and not history_stale:
                     return sanitize_json(cached_data)
 
-                # 只有在快取中沒有 history 時才嘗試獲取一次
+                # Fetch history if missing or stale
                 try:
                     history = fetch_history_from_yfinance(symbol, period=period, interval=interval)
                     if history:
                         cached_data["history"] = history
-                        # 異步保存包含 history 的完整數據到快取
                         StockService._save_to_cache(symbol, cached_data)
                 except Exception as e:
                     print(f"Non-critical: History fetch failed for {symbol}: {e}")
