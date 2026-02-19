@@ -61,7 +61,7 @@ export function EvolutionDashboard() {
             }
         }
         fetchState()
-        const interval = setInterval(fetchState, 30000) // 30s auto-refresh
+        const interval = setInterval(fetchState, 120000) // 120s auto-refresh
         return () => clearInterval(interval)
     }, [])
 

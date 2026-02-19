@@ -9,6 +9,7 @@ from pathlib import Path
 from api.db import get_db_connection, return_db_connection, init_db
 from api.constants import TW_STOCK_NAMES
 from api.services.stock_service import StockService
+from functools import lru_cache
 
 # Non-blocking DB Initialization (Lazy-loaded inside db.py get_db_connection)
 # Legacy: threading.Thread(target=init_db, daemon=True).start()
@@ -22,6 +23,17 @@ TW_STOCK_NAMES.update({})
 # [Optimization] Removed pre_warm_cache on startup to ensure instant launch.
 # SWR mechanism in StockService handles background refreshes on first request.
 # threading.Thread(target=pre_warm_cache, daemon=True).start()
+
+@lru_cache(maxsize=1)
+def load_strategy_config():
+    try:
+        config_path = Path(__file__).parent / "strategy_config.json"
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[API] Error loading strategy config: {e}")
+    return {}
 
 class handler(BaseHTTPRequestHandler):
     def _set_headers(self):
@@ -210,15 +222,7 @@ class handler(BaseHTTPRequestHandler):
                 state['anomaly_summary'] = EvolutionManager.get_anomaly_summary()
                 state['performance_tracking'] = PerformanceTracker.get_summary()
                 state['market_regime'] = StockService.get_market_regime()
-                state['strategy_config'] = {}
-                
-                try:
-                    config_path = Path(__file__).parent / "strategy_config.json"
-                    if config_path.exists():
-                        with open(config_path, "r", encoding="utf-8") as f:
-                            state['strategy_config'] = json.load(f)
-                except Exception as e:
-                    print(f"[API] Error loading strategy config: {e}")
+                state['strategy_config'] = load_strategy_config()
                 
                 self.wfile.write(json.dumps(state).encode('utf-8'))
             else:

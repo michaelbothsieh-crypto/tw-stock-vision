@@ -24,16 +24,37 @@ class StockAgentTools:
         missing = [f for f in required_fields if not data or data.get(f) is None]
 
         if missing:
-            EvolutionManager.log_anomaly(
-                "DATA_MISSING",
-                f"股票 {symbol} 缺失關鍵欄位: {missing} (來源: {preferred_source})",
-                {"symbol": symbol, "missing_fields": missing, "source": preferred_source}
-            )
+            # [Optimization] Check if data is fresh (< 24h). If so, do not re-flush.
+            # This prevents infinite loops for stocks that genuinely lack data (e.g. ETFs).
+            is_recent = False
+            if data and data.get('_cached_at'):
+                from datetime import datetime, timezone, timedelta
+                try:
+                    cached_at = datetime.fromisoformat(data.get('_cached_at'))
+                    if cached_at.tzinfo is None:
+                        cached_at = cached_at.replace(tzinfo=timezone.utc)
+                    
+                    # If cached within last 24 hours, consider it "tried recently"
+                    if (datetime.now(timezone.utc) - cached_at) < timedelta(hours=24):
+                        is_recent = True
+                except:
+                    pass
 
-            # [ 自癒閉環 ] 若首選來源失敗且非 yfinance，嘗試切換
-            if preferred_source != "yfinance":
-                print(f"[Evolution] Detecting missing data for {symbol}, triggering self-healing via yfinance...")
-                data = StockService.get_stock_details(symbol, period, interval, flush=True)
+            if not is_recent:
+                EvolutionManager.log_anomaly(
+                    "DATA_MISSING",
+                    f"股票 {symbol} 缺失關鍵欄位: {missing} (來源: {preferred_source})",
+                    {"symbol": symbol, "missing_fields": missing, "source": preferred_source}
+                )
+
+                # [ 自癒閉環 ] 若首選來源失敗且非 yfinance，嘗試切換
+                if preferred_source != "yfinance":
+                    print(f"[Evolution] Detecting missing data for {symbol}, triggering self-healing via yfinance...")
+                    data = StockService.get_stock_details(symbol, period, interval, flush=True)
+            else:
+                # Log but don't flush
+                # print(f"[AgentTools] Missing {missing} for {symbol} but cache is fresh (<24h). Skipping flush.")
+                pass
 
         return data
 

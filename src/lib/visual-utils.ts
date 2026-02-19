@@ -72,7 +72,7 @@ export const trunc2 = (value: number | undefined | null) => {
 export const fmtNum = (value: number | undefined | null, digits = 2) => {
     if (value === undefined || value === null || Number.isNaN(Number(value))) return '--';
     const v = Number(value);
-    if (v <= 0) return '--';
+    // [Fix] Allow 0 to be displayed (e.g. for Yield=0 or PE=0)
     const factor = Math.pow(10, digits);
     return (Math.trunc(v * factor) / factor).toFixed(digits);
 };

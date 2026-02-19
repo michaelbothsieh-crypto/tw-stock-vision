@@ -20,6 +20,11 @@ export const FocusMetrics = ({ stock, detailedName, chartData }: { stock: StockD
     if (!stock) return null;
 
     const latestRSI = useMemo(() => {
+        // [Optimization] Use backend provided RSI if available
+        if (stock.rsi !== undefined && stock.rsi !== null && stock.rsi !== 0) {
+            return stock.rsi;
+        }
+
         if (!chartData || chartData.length < 15) return 50;
         const data = chartData;
         const last = data[data.length - 1];
@@ -36,7 +41,7 @@ export const FocusMetrics = ({ stock, detailedName, chartData }: { stock: StockD
         }
         avgGain /= rsiPeriod; avgLoss /= rsiPeriod;
         return 100 - (100 / (1 + (avgGain / (avgLoss || 0.0001))));
-    }, [chartData]);
+    }, [chartData, stock.rsi]);
 
     const radarData = useMemo(() => {
         const raw = getRadarData(stock);

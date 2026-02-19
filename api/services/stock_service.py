@@ -161,6 +161,8 @@ class StockService:
         """從 tvscreener 取得 trending 資料（原有邏輯，抽出為獨立方法）"""
         market_param = market_param.upper()
         is_tw = (market_param == 'TW')
+        import tvscreener as tvs
+        from tvscreener import StockScreener, StockField
         results = []
         try:
             ss = StockScreener()
@@ -349,6 +351,10 @@ class StockService:
                 cached_data = dict(row[0]) if isinstance(row[0], dict) else {}
                 cache_updated_at = row[1] if len(row) > 1 else None
                 
+                # [Optimization] Inject cached_at for clients to determine freshness
+                if cache_updated_at:
+                    cached_data['_cached_at'] = cache_updated_at.isoformat()
+                
                 # [Fix] History TTL: re-fetch if older than 24 hours
                 from datetime import datetime, timezone
                 history_stale = True
@@ -394,6 +400,9 @@ class StockService:
         if is_digit and len(symbol) > 6:
             is_tw = False
             is_us = True
+
+        import tvscreener as tvs
+        from tvscreener import StockScreener, StockField
 
         try:
             ss = StockScreener()

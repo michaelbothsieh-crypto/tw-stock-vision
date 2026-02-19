@@ -5,6 +5,7 @@ export interface StockData {
     price: number;
     changePercent: number;
     volume: number;
+    rsi?: number;
     rvol: number;
     sector: string;
     rating: number;

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -154,10 +154,18 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
         [data, detailBySymbol]
     );
 
-    const selectedStock = useMemo(
-        () => enrichedData.find((s) => s.symbol === currentSymbol) || data.find((s) => s.symbol === currentSymbol) || enrichedData[0],
-        [enrichedData, data, currentSymbol]
-    );
+    // [Fix] Logic Priority: 
+    // 1. Direct Cache (detailBySymbol) -> Covers both Trending & Searched stocks
+    // 2. Trending List (enrichedData) -> Fallback for initial load
+    // 3. Default (First item)
+    const selectedStock = useMemo(() => {
+        if (currentSymbol && detailBySymbol[currentSymbol]) {
+            return detailBySymbol[currentSymbol];
+        }
+        return enrichedData.find((s) => s.symbol === currentSymbol) || enrichedData[0];
+    }, [enrichedData, currentSymbol, detailBySymbol]);
+
+    const prevSymbolRef = useRef<string>('');
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -166,46 +174,76 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
         return () => clearInterval(interval);
     }, []);
 
+    // [Optimization] Combined Fetch Logic with Cache
+    // 1. Symbol Switch: Check cache -> Set immediately -> Fetch fresh detail & history
+    // 2. Period Switch: Fetch history -> Update chart (preserve detail)
     useEffect(() => {
         if (!currentSymbol) return;
 
-        const fetchDetails = async () => {
+        let isCancelled = false;
+        const isSymbolChange = prevSymbolRef.current !== currentSymbol;
+        prevSymbolRef.current = currentSymbol;
+
+        const fetchData = async () => {
             setLoadingChart(true);
-            setChartData([]);
-            setDetailedName('');
+
+            // Phase 1: Optimistic UI
+            if (isSymbolChange) {
+                setChartData([]); // Always clear chart on symbol switch
+                if (detailBySymbol[currentSymbol]) {
+                    // Have cache: Detail is already handled by selectedStock (via render)
+                    // Just ensure name is set
+                    const cached = detailBySymbol[currentSymbol];
+                    if (cached.description || cached.name) {
+                        setDetailedName(cached.description || cached.name || '');
+                    }
+                } else {
+                    // No cache: Clear name
+                    setDetailedName('');
+                }
+            }
+
             try {
                 const cfg = PERIOD_MAP[periodKey];
                 const res = await fetch(`/api/stock?symbol=${currentSymbol}&period=${cfg.period}&interval=${cfg.interval}`);
                 if (!res.ok) throw new Error('Failed to fetch details');
                 const json = await res.json();
 
+                if (isCancelled) return;
+
+                // Update Chart (History)
                 if (Array.isArray(json.history)) {
                     setChartData(json.history);
                 }
 
+                // Update Detail (Always update to ensure freshness)
                 const detail = { ...json };
                 delete detail.history;
+
                 setDetailBySymbol((prev) => ({ ...prev, [currentSymbol]: detail }));
 
                 if (json.description || json.name) {
                     setDetailedName(json.description || json.name);
                 }
             } catch (error) {
-                console.error('Chart data error:', error);
+                if (!isCancelled) console.error('Data fetch error:', error);
             } finally {
-                setLoadingChart(false);
+                if (!isCancelled) setLoadingChart(false);
             }
         };
 
-        fetchDetails();
+        fetchData();
+
+        return () => { isCancelled = true; };
     }, [currentSymbol, periodKey]);
 
-    if (!enrichedData.length) {
+    if (!selectedStock) {
         return <div className="flex h-screen items-center justify-center font-mono text-zinc-500">系統初始化中 (INITIALIZING)...</div>;
     }
+    const activeStock = selectedStock as StockData;
 
     return (
-        <div className="flex min-h-screen flex-col bg-[#050505] text-white selection:bg-emerald-500/30">
+        <div className="flex min-h-screen flex-col bg-[#050505] text-white selection:bg-emerald-500/30 pb-8 lg:pb-0">
             <TerminalHeader lastUpdate={time} market={market} />
 
             {/* Mobile Search Bar - Sticky Top */}
@@ -245,7 +283,7 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
                             </div>
                         ) : (
                             <div className="h-[300px] w-full lg:h-[500px]" style={{ touchAction: 'pan-y' }}>
-                                <StockChart data={chartData} color={selectedStock?.changePercent >= 0 ? '#10b981' : '#f43f5e'} />
+                                <StockChart data={chartData} color={activeStock.changePercent >= 0 ? '#10b981' : '#f43f5e'} />
                             </div>
                         )}
 
@@ -270,7 +308,7 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
 
                 {/* 2. Focus Metrics */}
                 <div className="order-2 border-b border-white/10 bg-zinc-950/30 lg:order-1 lg:col-span-4 lg:border-b-0 lg:border-r">
-                    <FocusMetrics stock={selectedStock} detailedName={detailedName} chartData={chartData} />
+                    <FocusMetrics stock={activeStock} detailedName={detailedName} chartData={chartData} />
                 </div>
 
                 {/* 3. Market Overview */}
@@ -281,7 +319,7 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
                     <MarketOverview
                         data={enrichedData}
                         onSelect={onSelect}
-                        currentSymbol={selectedStock?.symbol}
+                        currentSymbol={activeStock.symbol}
                         market={market}
                         onMarketChange={onMarketChange}
                         className=""
