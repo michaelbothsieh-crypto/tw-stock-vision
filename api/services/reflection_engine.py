@@ -162,6 +162,24 @@ class ReflectionEngine:
             reflections.append(history_entry["reflection"])
 
         state["last_reflection"] = datetime.now().isoformat()
+
+        # ✅ Module C: 策略版本自動遞增
+        current_version = state.get("version", "1.0.0")
+        parts = current_version.split(".")
+        try:
+            major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
+        except (ValueError, IndexError):
+            major, minor, patch = 1, 0, 0
+
+        has_mutation = any("mutations" in r for r in reflections if isinstance(r, str) and "Mutated" in r)
+        if has_mutation:
+            minor += 1
+            patch = 0
+        else:
+            patch += 1
+        state["version"] = f"{major}.{minor}.{patch}"
+        print(f"[ReflectionEngine] 版本更新: {current_version} → {state['version']}")
+
         ReflectionEngine.save_state(state)
 
         return reflections

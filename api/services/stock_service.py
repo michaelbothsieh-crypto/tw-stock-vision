@@ -147,6 +147,18 @@ class StockService:
                     except Exception as e:
                         print(f"[Cache] Background refresh error: {e}")
                 threading.Thread(target=_bg_refresh, daemon=True).start()
+            
+            # ✅ Activity-Driven: 利用 API 請求驅動背景批次結算
+            def _bg_resolve():
+                try:
+                    from api.services.performance_tracker import PerformanceTracker
+                    resolved = PerformanceTracker.resolve_all_pending()
+                    if resolved > 0:
+                        print(f"[Activity-Driven] 背景結算 {resolved} 筆預測")
+                except Exception as e:
+                    print(f"[Activity-Driven] 結算錯誤: {e}")
+            threading.Thread(target=_bg_resolve, daemon=True).start()
+            
             return cached
 
         # 快取未命中：同步取得資料並寫入快取
@@ -154,6 +166,18 @@ class StockService:
         results = StockService._fetch_trending_from_source(market_param)
         if results:
             _cache_set(cache_key, results)
+
+        # ✅ Activity-Driven: 利用 API 請求驅動背景批次結算
+        def _bg_resolve():
+            try:
+                from api.services.performance_tracker import PerformanceTracker
+                resolved = PerformanceTracker.resolve_all_pending()
+                if resolved > 0:
+                    print(f"[Activity-Driven] 背景結算 {resolved} 筆預測")
+            except Exception as e:
+                print(f"[Activity-Driven] 結算錯誤: {e}")
+        threading.Thread(target=_bg_resolve, daemon=True).start()
+
         return results
 
     @staticmethod

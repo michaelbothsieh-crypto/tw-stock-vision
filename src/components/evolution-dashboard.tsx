@@ -340,7 +340,7 @@ export function EvolutionDashboard() {
                 <div className="flex-1 space-y-4 overflow-y-auto max-h-[300px] pr-2 custom-scrollbar relative z-10">
                     <AnimatePresence mode="popLayout">
                         {mainStrategy.performance_history.length > 0 ? (
-                            mainStrategy.performance_history.map((log: any, i: number) => (
+                            [...mainStrategy.performance_history].reverse().map((log: any, i: number) => (
                                 <motion.div
                                     key={i}
                                     initial={{ x: -10, opacity: 0 }}
@@ -349,17 +349,22 @@ export function EvolutionDashboard() {
                                     className="p-4 rounded-2xl bg-black/20 border border-white/5 hover:border-primary/20 transition-colors group/item"
                                 >
                                     <div className="flex justify-between items-start mb-2">
-                                        <span className="text-[10px] font-mono text-zinc-500">{new Date(log.date).toLocaleDateString()}</span>
-                                        <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-md", log.performance.avg_return >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400")}>
-                                            {log.performance.avg_return >= 0 ? "+" : ""}{(log.performance.avg_return * 100).toFixed(1)}% Return
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] font-mono text-zinc-500">{new Date(log.date).toLocaleDateString()}</span>
+                                            {log.mutations && (
+                                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-400">
+                                                    MUTATED
+                                                </span>
+                                            )}
+                                        </div>
+                                        <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-md", (log.avg_return ?? 0) >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400")}>
+                                            {(log.avg_return ?? 0) >= 0 ? "+" : ""}{((log.avg_return ?? 0) * 100).toFixed(1)}% Return
                                         </span>
                                     </div>
-                                    {log.reflections.map((ref: string, j: number) => (
-                                        <div key={j} className="flex gap-2 text-xs text-zinc-300 mt-1">
-                                            <ChevronRight className="h-3 w-3 mt-0.5 text-primary flex-shrink-0" />
-                                            {ref}
-                                        </div>
-                                    ))}
+                                    <div className="flex gap-2 text-xs text-zinc-300 mt-1">
+                                        <ChevronRight className="h-3 w-3 mt-0.5 text-primary flex-shrink-0" />
+                                        {log.reflection}
+                                    </div>
                                 </motion.div>
                             ))
                         ) : (

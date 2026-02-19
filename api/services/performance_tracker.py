@@ -147,6 +147,77 @@ class PerformanceTracker:
             PerformanceTracker._check_and_trigger_evolution(data)
 
     @staticmethod
+    def resolve_all_pending():
+        """
+        批次結算所有到期的待解決預測。
+        從 DB cache 取得當前價格，不依賴使用者查詢。
+        由 get_market_trending 在每次 API 遞送結果後呼叫。
+        """
+        data = PerformanceTracker._load()
+        min_hold_hours = 24
+        now = datetime.now()
+
+        # 1. 找出所有到期且未結算的預測
+        pending_symbols = set()
+        for pred in data["predictions"]:
+            if not pred.get("resolved"):
+                pred_time = datetime.fromisoformat(pred["timestamp"])
+                hours_passed = (now - pred_time).total_seconds() / 3600
+                if hours_passed >= min_hold_hours:
+                    pending_symbols.add(pred["symbol"])
+
+        if not pending_symbols:
+            return 0
+
+        # 2. 批次從 DB cache 取得當前價格
+        from api.db import get_db_connection, return_db_connection
+        prices = {}
+        conn = get_db_connection()
+        if conn:
+            try:
+                cur = conn.cursor()
+                placeholders = ','.join(['%s'] * len(pending_symbols))
+                cur.execute(
+                    f"SELECT symbol, data->>'price' FROM stock_cache WHERE symbol IN ({placeholders})",
+                    tuple(pending_symbols)
+                )
+                for row in cur.fetchall():
+                    try:
+                        prices[row[0]] = float(row[1])
+                    except (TypeError, ValueError):
+                        pass
+                cur.close()
+            finally:
+                return_db_connection(conn)
+
+        if not prices:
+            return 0
+
+        # 3. 結算
+        resolved_count = 0
+        for pred in data["predictions"]:
+            if not pred.get("resolved") and pred["symbol"] in prices:
+                pred_time = datetime.fromisoformat(pred["timestamp"])
+                hours_passed = (now - pred_time).total_seconds() / 3600
+                if hours_passed >= min_hold_hours:
+                    initial = pred.get("initial_price")
+                    current = prices[pred["symbol"]]
+                    if initial and initial > 0 and current > 0:
+                        reward_pct = ((current - initial) / initial) * 100
+                        pred["resolved"] = True
+                        pred["actual_return_pct"] = round(reward_pct, 2)
+                        pred["resolved_at"] = now.isoformat()
+                        pred["final_price"] = current
+                        resolved_count += 1
+
+        if resolved_count > 0:
+            PerformanceTracker._save(data)
+            print(f"[PerformanceTracker] 批次結算完成：{resolved_count} 筆")
+            PerformanceTracker._check_and_trigger_evolution(data)
+
+        return resolved_count
+
+    @staticmethod
     def record_actual(symbol: str, actual_return_pct: float, days_held: int = 5):
         """
         記錄實際報酬率。
@@ -225,18 +296,44 @@ class PerformanceTracker:
     def _check_and_trigger_evolution(data: dict):
         """
         檢查是否達到進化觸發條件，若是則自動呼叫 ReflectionEngine。
+        觸發條件（任一滿足即觸發）：
+        1. 準確率低於閾值（表現型觸發）
+        2. 距上次反思 > 24h 且已結算 ≥ 5 筆（定期型觸發）
         """
         stats = PerformanceTracker.calculate_accuracy()
+        resolved_count = len([p for p in data["predictions"] if p.get("resolved")])
 
-        if stats["accuracy"] is None:
-            return  # 樣本不足，不觸發
+        # --- 條件 1: 表現型觸發 ---
+        accuracy_trigger = False
+        if stats["accuracy"] is not None:
+            threshold = EVOLUTION_TRIGGERS["accuracy_drop_threshold"]
+            if stats["accuracy"] < threshold:
+                accuracy_trigger = True
+                print(f"[PerformanceTracker] 準確率 {stats['accuracy']:.1%} < {threshold:.0%}，觸發進化！")
 
-        threshold = EVOLUTION_TRIGGERS["accuracy_drop_threshold"]
-        if stats["accuracy"] < threshold:
-            print(f"[PerformanceTracker] 準確率 {stats['accuracy']:.1%} < {threshold:.0%}，自動觸發進化！")
+        # --- 條件 2: 定期型觸發 (24h 冷卻 + 5 筆門檻) ---
+        periodic_trigger = False
+        if resolved_count >= 5:
             try:
                 from api.services.reflection_engine import ReflectionEngine
-                actual_perf = {"avg_return": stats["avg_return"] / 100}  # 轉換為小數
+                state = ReflectionEngine.load_state()
+                last_ref = state.get("last_reflection")
+                if last_ref is None:
+                    periodic_trigger = True
+                    print("[PerformanceTracker] 首次反思觸發（從未執行過）")
+                else:
+                    hours_since = (datetime.now() - datetime.fromisoformat(last_ref)).total_seconds() / 3600
+                    if hours_since >= 24:
+                        periodic_trigger = True
+                        print(f"[PerformanceTracker] 距上次反思 {hours_since:.1f}h > 24h，定期觸發")
+            except Exception as e:
+                print(f"[PerformanceTracker] 檢查反思時間失敗: {e}")
+
+        # --- 執行反思 ---
+        if accuracy_trigger or periodic_trigger:
+            try:
+                from api.services.reflection_engine import ReflectionEngine
+                actual_perf = {"avg_return": (stats["avg_return"] or 0) / 100}
                 reflections = ReflectionEngine.run_daily_reflection([], actual_perf)
                 print(f"[PerformanceTracker] 進化完成：{reflections}")
             except Exception as e:
