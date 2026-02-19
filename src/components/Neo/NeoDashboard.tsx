@@ -238,8 +238,60 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
         return () => { isCancelled = true; };
     }, [currentSymbol, periodKey, retryKey]);
 
+    // Skeleton Loading State
     if (!selectedStock) {
-        return <div className="flex h-screen items-center justify-center font-mono text-zinc-500">系統初始化中 (INITIALIZING)...</div>;
+        return (
+            <div className="flex min-h-screen flex-col bg-[#050505] text-white">
+                {/* Header Skeleton */}
+                <div className="flex h-14 items-center justify-between border-b border-white/10 bg-zinc-950 px-4 lg:px-6">
+                    <div className="flex items-center gap-2">
+                        <div className="h-4 w-4 rounded-full bg-emerald-500/20 animate-pulse" />
+                        <div className="h-4 w-32 rounded bg-zinc-800 animate-pulse" />
+                    </div>
+                    <div className="h-4 w-24 rounded bg-zinc-800 animate-pulse" />
+                </div>
+
+                {/* Mobile Search Skeleton */}
+                <div className="sticky top-0 z-30 block border-b border-white/10 bg-zinc-950/80 p-3 backdrop-blur-md lg:hidden">
+                    <div className="h-10 w-full rounded bg-zinc-900 animate-pulse" />
+                </div>
+
+                <div className="flex flex-1 flex-col lg:grid lg:grid-cols-12">
+                    {/* Focus Metrics Skeleton (Mobile Order 1) */}
+                    <div className="order-1 border-b border-white/10 p-6 lg:col-span-4 lg:border-r">
+                        <div className="mb-4 h-8 w-24 rounded bg-zinc-800 animate-pulse" />
+                        <div className="mb-2 h-12 w-48 rounded bg-zinc-800 animate-pulse" />
+                        <div className="h-6 w-32 rounded bg-zinc-900 animate-pulse" />
+                        <div className="mt-8 space-y-4">
+                            <div className="h-4 w-full rounded bg-zinc-900 animate-pulse" />
+                            <div className="h-4 w-3/4 rounded bg-zinc-900 animate-pulse" />
+                        </div>
+                    </div>
+
+                    {/* Chart Skeleton (Mobile Order 2) */}
+                    <div className="order-2 flex min-h-[280px] flex-col items-center justify-center border-b border-white/10 bg-zinc-900/10 lg:col-span-5 lg:min-h-[500px] lg:border-r">
+                        <div className="h-4 w-48 rounded bg-zinc-800 animate-pulse mb-4" />
+                        <span className="animate-pulse font-mono text-xs text-emerald-500">系統初始化中 (INITIALIZING)...</span>
+                    </div>
+
+                    {/* Market List Skeleton (Mobile Order 3) */}
+                    <div className="order-3 lg:col-span-3 p-4">
+                        <div className="space-y-3">
+                            {[...Array(6)].map((_, i) => (
+                                <div key={i} className="flex items-center justify-between">
+                                    <div className="h-10 w-10 rounded bg-zinc-900 animate-pulse" />
+                                    <div className="flex-1 px-4 space-y-2">
+                                        <div className="h-3 w-20 rounded bg-zinc-800 animate-pulse" />
+                                        <div className="h-3 w-12 rounded bg-zinc-900 animate-pulse" />
+                                    </div>
+                                    <div className="h-8 w-16 rounded bg-zinc-800 animate-pulse" />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
     }
     const activeStock = selectedStock as StockData;
 
