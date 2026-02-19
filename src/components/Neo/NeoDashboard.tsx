@@ -271,9 +271,13 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
             </div>
 
             <div className="flex flex-1 flex-col pb-16 lg:grid lg:grid-cols-12 lg:pb-0">
-                {/* Mobile: Metrics first (price info), then Chart. Desktop: Chart center */}
 
-                {/* 1. Chart Area */}
+                {/* DOM 順序 1: FocusMetrics (Mobile: first, Desktop: left col) */}
+                <div className="order-1 border-b border-white/10 bg-zinc-950/30 lg:order-1 lg:col-span-4 lg:border-b-0 lg:border-r">
+                    <FocusMetrics stock={activeStock} detailedName={detailedName} chartData={chartData} />
+                </div>
+
+                {/* DOM 順序 2: Chart Area (Mobile: second, Desktop: center col) */}
                 <div className="relative order-2 flex min-h-[280px] flex-col items-center justify-center border-b border-white/10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-900/50 to-black lg:order-2 lg:col-span-5 lg:min-h-[600px] lg:border-b-0 lg:border-r">
                     <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px]" />
 
@@ -311,12 +315,7 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
                     </div>
                 </div>
 
-                {/* 2. Focus Metrics (Mobile: First — shows price/symbol) */}
-                <div className="order-1 border-b border-white/10 bg-zinc-950/30 lg:order-1 lg:col-span-4 lg:border-b-0 lg:border-r">
-                    <FocusMetrics stock={activeStock} detailedName={detailedName} chartData={chartData} />
-                </div>
-
-                {/* 3. Market Overview */}
+                {/* DOM 順序 3: Market Overview (Mobile: third, Desktop: right col) */}
                 <div className="order-3 max-h-[50vh] overflow-y-auto bg-zinc-950/50 lg:order-3 lg:col-span-3 lg:max-h-none lg:min-h-[400px] lg:overflow-visible">
                     <MarketOverview
                         data={enrichedData}
