@@ -161,9 +161,60 @@ class StockService:
             
             return cached
 
-        # 快取未命中：同步取得資料並寫入快取
-        is_tw = (market_param == 'TW')
+        # 快取未命中：嘗試從 DB 獲取 (DB Cache First Strategy)
+        t0 = time.time()
+        db_results = []
+        conn = get_db_connection()
+        if conn:
+            try:
+                cur = conn.cursor()
+                # 簡單的 "熱門股" 定義：依成交量排序的最近資料
+                # 區分台美股
+                market_filter = "symbol ~ '^[0-9]+$'" if market_param == 'TW' else "symbol !~ '^[0-9]+$'"
+                cur.execute(f"""
+                    SELECT data FROM stock_cache 
+                    WHERE {market_filter} 
+                    AND updated_at > NOW() - INTERVAL '3 days'
+                    ORDER BY (data->>'volume')::numeric DESC
+                    LIMIT 15
+                """)
+                rows = cur.fetchall()
+                if rows:
+                    db_results = [r[0] for r in rows]
+                    print(f"[Timing] DB Cache hit for {market_param}: {len(db_results)} items in {time.time()-t0:.3f}s")
+            except Exception as e:
+                print(f"[API] DB Cache errors: {e}")
+            finally:
+                return_db_connection(conn)
+
+        if db_results:
+            # 命中 DB 快取：
+            # 1. 寫入 Memory Cache (避免短時間重複 DB Query)
+            _cache_set(cache_key, db_results)
+            
+            # 2. 觸發背景刷新 (Stale-While-Revalidate similar logic)
+            # 只有當 DB 資料「有點舊」時才刷新？或是每次 Cold Start 都刷新？
+            # 為了確保資料新鮮，每次 Cold Start 都觸發背景刷新是安全的
+            def _bg_refresh_cold():
+                try:
+                    t1 = time.time()
+                    fresh = StockService._fetch_trending_from_source(market_param)
+                    if fresh:
+                        _cache_set(cache_key, fresh)
+                        print(f"[Cache] Cold-Start Background refresh done for {cache_key} in {time.time()-t1:.3f}s")
+                except Exception as e:
+                    print(f"[Cache] Cold-Start Background refresh error: {e}")
+            threading.Thread(target=_bg_refresh_cold, daemon=True).start()
+
+            print(f"[Timing] Returning DB data for {market_param}. Total time: {time.time()-t0:.3f}s")
+            return db_results
+
+        # DB 也沒有資料 (系統初次初始化)：同步取得資料
+        print(f"[Timing] Cache & DB Miss. Fetching from Source synchronously...")
+        t_src = time.time()
         results = StockService._fetch_trending_from_source(market_param)
+        print(f"[Timing] Source fetch done in {time.time()-t_src:.3f}s")
+        
         if results:
             _cache_set(cache_key, results)
 
@@ -183,6 +234,7 @@ class StockService:
     @staticmethod
     def _fetch_trending_from_source(market_param):
         """從 tvscreener 取得 trending 資料（原有邏輯，抽出為獨立方法）"""
+        t_start = time.time()
         market_param = market_param.upper()
         is_tw = (market_param == 'TW')
         import tvscreener as tvs
