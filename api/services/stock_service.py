@@ -8,8 +8,10 @@ from api.constants import TW_STOCK_NAMES
 from api.scrapers import fetch_from_yfinance, fetch_history_from_yfinance, sanitize_json, get_field, process_tvs_row, trunc2, calculate_rsi
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import tvscreener as tvs
+from tvscreener import StockScreener, StockField
 
-# [Optimization] Heavy imports (tvscreener) are lazy-loaded inside methods.
+# [Optimization] Heavy imports are now at top-level to support unit test mocking.
 # MarketRegimeDetector is lazy-initialized on first use.
 _MARKET_REGIME = None
 _MARKET_REGIME_LOCK = threading.Lock()
@@ -401,17 +403,24 @@ class StockService:
                     except Exception:
                         history_stale = True
 
-                if cached_data.get("history") and not history_stale:
+                history_key = f"history_{period}_{interval}"
+
+                if cached_data.get(history_key) and not history_stale:
+                    cached_data["history"] = cached_data[history_key]
                     return sanitize_json(cached_data)
 
                 # Fetch history if missing or stale
                 try:
                     history = fetch_history_from_yfinance(symbol, period=period, interval=interval)
                     if history:
+                        cached_data[history_key] = history
                         cached_data["history"] = history
                         StockService._save_to_cache(symbol, cached_data)
+                    else:
+                        cached_data["history"] = []
                 except Exception as e:
                     print(f"Non-critical: History fetch failed for {symbol}: {e}")
+                    cached_data["history"] = []
                 
                 return sanitize_json(cached_data)
             
@@ -434,9 +443,6 @@ class StockService:
         if is_digit and len(symbol) > 6:
             is_tw = False
             is_us = True
-
-        import tvscreener as tvs
-        from tvscreener import StockScreener, StockField
 
         try:
             ss = StockScreener()
@@ -503,8 +509,15 @@ class StockService:
             
             # If we are flushing, we might want to return history too for the caller
             history = fetch_history_from_yfinance(symbol, period, interval)
+            history_key = f"history_{period}_{interval}"
             if history:
+                data[history_key] = history
                 data["history"] = history
+                # Save the flushed data + history to cache to avoid immediate refetch
+                StockService._save_to_cache(symbol, data)
+            else:
+                data["history"] = []
+                
             return sanitize_json(data)
         
         return None

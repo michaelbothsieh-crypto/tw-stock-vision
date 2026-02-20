@@ -270,7 +270,7 @@ export const NeoDashboard = ({ data, currentSymbol, onSelect, market, onMarketCh
             }
         };
 
-        const intervalId = setInterval(poll, 5000); // 5 seconds
+        const intervalId = setInterval(poll, 3000); // 3 seconds
         return () => clearInterval(intervalId);
     }, [currentSymbol, market]);
 

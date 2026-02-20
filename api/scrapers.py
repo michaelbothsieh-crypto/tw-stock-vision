@@ -1,16 +1,17 @@
 import math
 import os
 import re
+import yfinance as yf
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from api.constants import TW_STOCK_NAMES, SECTOR_TRANSLATIONS, EXCHANGE_TRANSLATIONS
 from api.db import get_db_connection, return_db_connection
 
-# [Optimization] Heavy imports (tvscreener, yfinance, requests) are lazy-loaded
-# inside functions to eliminate cold-start overhead.
+# [Optimization] Heavy imports are now at top-level to support unit test mocking.
+# If cold-start is an issue, consider alternative mocking strategies in tests.
 
 def get_session():
-    import requests
-    from requests.adapters import HTTPAdapter
-    from urllib3.util.retry import Retry
     session = requests.Session()
     retry = Retry(connect=3, backoff_factor=0.5)
     adapter = HTTPAdapter(max_retries=retry)
@@ -106,7 +107,6 @@ def format_market_cap(val, is_tw=True):
         return str(val)
 
 def fetch_from_yfinance(symbol):
-    import yfinance as yf
     try:
         # 強制台股代號 (4位數字) 加上 .TW 後綴，確保抓取精確度
         yf_symbol = symbol
@@ -216,7 +216,6 @@ def fetch_from_yfinance(symbol):
 
 def fetch_history_from_yfinance(symbol, period="1y", interval="1d", max_points=365):
     """Fetch OHLCV history for charting from yfinance."""
-    import yfinance as yf
     normalized = symbol.strip().upper()
     candidates = []
 
@@ -417,7 +416,6 @@ def fetch_realtime_quote(symbol):
     極速抓取即時報價 (Last Price, Change, Pct)
     使用 yfinance fast_info (不抓取完整 info，只抓必要的)
     """
-    import yfinance as yf
     import time
     try:
         # Handle TW suffixes if needed (similar logic to fetch_from_yfinance)

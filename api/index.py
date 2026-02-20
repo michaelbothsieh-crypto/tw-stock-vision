@@ -189,6 +189,15 @@ class handler(BaseHTTPRequestHandler):
                 data = StockService.get_leaderboard()
                 self._set_headers()
                 self.wfile.write(json.dumps(data, default=str).encode('utf-8'))
+            elif q.get('action', [None])[0] == 'get_quote':
+                symbol = q.get('symbol', [None])[0]
+                from api.scrapers import fetch_realtime_quote
+                quote = fetch_realtime_quote(symbol) if symbol else None
+                self._set_headers()
+                if quote:
+                    self.wfile.write(json.dumps({"status": "success", "quote": quote}).encode('utf-8'))
+                else:
+                    self.wfile.write(json.dumps({"error": "Failed to fetch quote"}).encode('utf-8'))
             elif 'trending' in q or '/market/trending' in parsed.path: 
                 market = q.get('market', ['TW'])[0]
                 data = StockService.get_market_trending(market)
